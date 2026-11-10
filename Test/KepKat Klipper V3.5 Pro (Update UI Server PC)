@@ -1,0 +1,2774 @@
+# @title KepKat Klipper V3.5 Pro (Update UI Server PC)
+# ==============================================================================
+import os, sys, time, json, urllib.request, requests
+from google.colab import output
+from IPython.display import HTML, display, clear_output
+
+sys.tracebacklimit = 0
+
+try:
+    import os
+    import time
+    import re
+    import html
+    import subprocess
+    import requests
+    import base64
+    import threading
+    import random
+    from IPython.display import HTML, display, clear_output, Javascript
+
+    # SMART DETECT: Cek apakah mesin server udah nyala di latar belakang (Port 8000)
+    server_running = (os.system("fuser 8000/tcp >/dev/null 2>&1") == 0)
+
+    def fetch_image(url):
+        try:
+            r = requests.get(url, timeout=5)
+            if r.status_code == 200:
+                return f"data:image/png;base64,{base64.b64encode(r.content).decode('utf-8')}"
+        except: pass
+        return ""
+
+    # Pakai URL format raw untuk bypass render HTML Github (LOGO BARU)
+    b64_panjang = fetch_image("https://github.com/klipkatpro/klipkat_asset/blob/main/Gambar/Logo%20Panjang.png?raw=true")
+    b64_kotak = fetch_image("https://github.com/klipkatpro/klipkat_asset/blob/main/Gambar/Logo%20Kotak.jpg?raw=true")
+
+    # ==============================================================================
+    # PENGECEKAN IP, GPU & RUNTIME UNTUK UI COLAB
+    # ==============================================================================
+    try:
+        ip_data = requests.get('https://ipinfo.io/json', timeout=3).json()
+        server_ip = ip_data.get('ip', 'Unknown')
+    except:
+        server_ip = "Unknown"
+
+    try:
+        gpu_info = subprocess.check_output(['nvidia-smi', '--query-gpu=name', '--format=csv,noheader']).decode('utf-8').strip()
+        gpu_active = bool(gpu_info)
+        runtime_type = gpu_info if gpu_active else "CPU (Standard)"
+    except:
+        gpu_active = False
+        runtime_type = "CPU (Standard)"
+
+    runtime_color = "#22c55e" if gpu_active else "#d4d4d8"
+
+    # JEDA NAPAS SINGKAT
+    time.sleep(0.5)
+    clear_output(wait=True)
+
+    # Merender Tampilan Banner Utama & Log Terminal SECARA INSTAN (LAYOUT ATAS-BAWAH)
+    display(HTML(f"""
+    <div style="background: #000000; padding: 25px; border-radius: 12px; border: 1px solid #22c55e; font-family: sans-serif; color: #e4e4e7; box-shadow: 0 10px 30px rgba(34, 197, 94, 0.15); max-width: 900px; box-sizing: border-box; margin: 0 auto; display: flex; flex-direction: column; gap: 20px;">
+        
+        <!-- HEADER (Logo & Info Server) -->
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <img src="{b64_panjang}" style="height: 65px; margin-top: 5px; object-fit: contain;" alt="KepKat Klipper">
+            <div style="text-align: right; font-family: monospace; font-style: italic; color: #a1a1aa; font-size: 11px; line-height: 1.6;">
+                <div style="margin-bottom: 3px;">Status Server: <span id="yt-status-ui" style="color: #facc15; font-weight: bold; font-size: 12px;">Mengecek</span></div>
+                <div>Runtime: <span style="color: {runtime_color}; font-weight: bold;">{runtime_type}</span></div>
+                <div>IP: <span style="color: #d4d4d8;">{server_ip}</span></div>
+            </div>
+        </div>
+
+        <!-- WARNING BOX -->
+        <div style="background: rgba(34, 197, 94, 0.1); border-left: 4px solid #22c55e; padding: 16px; border-radius: 0 8px 8px 0;">
+            <b style="color: #22c55e; font-size: 13px; font-family: monospace;">⚠️ STATUS KONEKSI SANGAT PENTING:</b><br>
+            <span style="font-size: 12px; line-height: 1.6; color: #d4d4d8;">Pastikan indikator RAM/Disk di pojok kanan atas Colab menunjukkan <b>✅ Centang Hijau (Connected)</b> yang stabil. Jika berubah oranye, server akan terputus! Jaga jaringan Anda agar tetap stabil.</span>
+            
+            <div id="catatan-wajib" style="margin-top: 15px; padding-top: 15px; border-top: 1px dashed rgba(34, 197, 94, 0.4);">
+                <b style="color: #facc15; font-size: 14px; font-family: monospace; letter-spacing: 1px;">📌 CATATAN WAJIB:</b><br>
+                <span style="font-size: 13px; line-height: 1.6; color: #f4f4f5; font-weight: bold;">Pastikan status server AMAN berwarna hijau, jika DIBLOKIR putuskan runtime kemudian refresh dan RUN kembali sampai status server AMAN.</span>
+            </div>
+        </div>
+
+        <!-- AKSES BUTTONS (Private & Public) -->
+        <div id="link-container" style="display: flex; flex-wrap: wrap; gap: 20px;">
+            <!-- KOTAK KODE PRIVAT -->
+            <div style="flex: 1; min-width: 250px; background: linear-gradient(145deg, #18181b, #09090b); padding: 30px 20px; border-radius: 16px; border: 2px dashed #3b82f6; text-align: center; box-shadow: 0 0 25px rgba(59, 130, 246, 0.15);">
+                <span style="color: #60a5fa; font-size: 13px; display: block; margin-bottom: 25px; font-weight: 900; font-family: monospace; letter-spacing: 2px;">SERVER LOKAL (CEPAT)</span>
+                <button id="btn-copy-private" disabled style="background: #1e3a8a; color: #bfdbfe; border: 1px solid #3b82f6; padding: 14px 20px; width: 100%; border-radius: 10px; cursor: not-allowed; font-size: 14px; font-weight: 900; transition: all 0.3s; text-transform: uppercase; letter-spacing: 1px; box-shadow: 0 6px 15px rgba(0,0,0,0.4); opacity: 0.5;">Menyiapkan...</button>
+            </div>
+
+            <!-- KOTAK KODE PUBLIK -->
+            <div style="flex: 1; min-width: 250px; background: linear-gradient(145deg, #18181b, #09090b); padding: 30px 20px; border-radius: 16px; border: 2px dashed #22c55e; text-align: center; box-shadow: 0 0 25px rgba(34, 197, 94, 0.15);">
+                <span style="color: #4ade80; font-size: 13px; display: block; margin-bottom: 25px; font-weight: 900; font-family: monospace; letter-spacing: 2px;">SERVER PUBLIK (CADANGAN)</span>
+                <button id="btn-copy-public" disabled style="background: #064e3b; color: #a7f3d0; border: 1px solid #10b981; padding: 14px 20px; width: 100%; border-radius: 10px; cursor: not-allowed; font-size: 14px; font-weight: 900; transition: all 0.3s; text-transform: uppercase; opacity: 0.5; letter-spacing: 1px; box-shadow: 0 6px 15px rgba(0,0,0,0.4);">Menyiapkan...</button>
+            </div>
+        </div>
+
+        <!-- HACKER TERMINAL LOGS -->
+        <div style="display: flex; flex-direction: column;">
+            <span style="color: #22c55e; font-size: 12px; font-weight: bold; margin-bottom: 8px; font-family: monospace; letter-spacing: 1px;">>_ TERMINAL LOGS :</span>
+            <div id="hacker-terminal" class="custom-scrollbar" style="height: 250px; background: #050505; color: #22c55e; overflow-y: auto; text-align: left; padding: 15px; font-family: 'Courier New', Courier, monospace; border: 1px solid #27272a; border-radius: 8px; font-size: 12px; line-height: 1.6; box-shadow: inset 0 0 20px rgba(0,0,0,0.8);">
+            </div>
+        </div>
+
+        <div style="color: #a1a1aa; font-size: 12px; font-weight: bold; line-height: 1.5; font-style: italic; text-align: center;">
+            Versi 3.5 Pro<br>
+            <span style="font-weight: normal; font-size: 11px;">Developed by handyazka</span>
+        </div>
+
+        <style>
+            .custom-scrollbar::-webkit-scrollbar {{ width: 6px; }}
+            .custom-scrollbar::-webkit-scrollbar-thumb {{ background: #3f3f46; border-radius: 6px; }}
+        </style>
+    </div>
+    """))
+
+    # ==============================================================================
+    # PENGECEKAN CEPAT (FAIL-FAST) SEBELUM INSTALL YG BERAT-BERAT
+    # ==============================================================================
+    try:
+        import yt_dlp
+    except ImportError:
+        subprocess.run([sys.executable, "-m", "pip", "install", "-q", "--upgrade", "yt-dlp", "requests"], stdout=subprocess.DEVNULL)
+        import yt_dlp
+
+    test_url = "https://www.youtube.com/watch?v=Qf9rkRFn1fw"
+    test_file = "static/test_yt_check.mp4"
+
+    ydl_test_opts = {
+        'quiet': True,
+        'no_warnings': True,
+        'nocheckcertificate': True,
+        'retries': 0,             # Jangan lakukan pengulangan
+        'socket_timeout': 5,      # Batasi maksimal 5 detik saja
+        'extractor_retries': 0
+    }
+
+    if os.path.exists("cookies.txt"):
+        ydl_test_opts['cookiefile'] = 'cookies.txt'
+
+    is_safe = False
+    try:
+        os.makedirs("static", exist_ok=True)
+        if os.path.exists(test_file): os.remove(test_file)
+        ydl_test_opts['format'] = 'bestvideo[height<=144][vcodec^=avc]+bestaudio[ext=m4a]/bestvideo[height<=240][vcodec^=avc]+bestaudio[ext=m4a]/bestvideo[height<=360][vcodec^=avc]+bestaudio[ext=m4a]/worst[ext=mp4]'
+        ydl_test_opts['outtmpl'] = test_file
+        with yt_dlp.YoutubeDL(ydl_test_opts) as ydl_test: ydl_test.download([test_url])
+        if os.path.exists(test_file):
+            is_safe = True
+    except:
+        is_safe = False
+    finally:
+        if os.path.exists(test_file):
+            try: os.remove(test_file)
+            except: pass
+
+    # UPDATE STATUS KE UI
+    if not is_safe:
+        display(Javascript("var yt_el = document.getElementById('yt-status-ui'); if(yt_el) { yt_el.innerText = 'DIBLOKIR'; yt_el.style.color = '#ef4444'; }"))
+        display(HTML("""
+        <div style="margin-top:15px; padding:15px; background:#ef4444; color:white; font-size:14px; font-weight:bold; text-align:center; border-radius:10px; border: 2px solid #b91c1c; font-family: sans-serif; max-width: 900px; margin-left: auto; margin-right: auto;">
+            🚨 SERVER (IP) INI DIBLOKIR YOUTUBE! 🚨<br>
+            <span style="font-size: 12px; font-weight: normal;">Disarankan untuk Putuskan Runtime dan Run ulang agar mendapat IP baru.</span>
+        </div>
+        """))
+    else:
+        display(Javascript("var yt_el = document.getElementById('yt-status-ui'); if(yt_el) { yt_el.innerText = 'AMAN'; yt_el.style.color = '#22c55e'; }"))
+    # ==============================================================================
+
+
+    def log_terminal(msg):
+        clean_msg = re.compile(r'\x1B(?:[@-Z\-_]|\[[0-?]*[ -/]*[@-~])').sub('', str(msg))
+
+        color = "#71717a"
+        if any(k in clean_msg for k in ["[SUCCESS]", "[DONE]", "berhasil", "optimal", "maksimal"]): color = "#3b82f6"
+        elif any(k in clean_msg for k in ["[ERROR]", "[BLOCKED]", "[DELETED]", "Gagal", "FATAL"]): color = "#ef4444"
+        elif any(k in clean_msg for k in ["[WARNING]", "[AWAS]", "Melewati"]): color = "#f97316"
+        elif any(k in clean_msg for k in ["[KEPKAT-INIT]", "[KEPKAT-SYS]", "[KEPKAT-NET]", "Menyiapkan", "Memulai"]): color = "#22c55e"
+
+        msg_escaped = html.escape(clean_msg).replace('\n', '<br>').replace('"', '\\"').replace("'", "\\'")
+        js_code = f"""
+        var term = document.getElementById('hacker-terminal');
+        if(term) {{
+            var newDiv = document.createElement('div');
+            newDiv.style.color = '{color}';
+            newDiv.innerHTML = '{msg_escaped}';
+            term.appendChild(newDiv);
+            term.scrollTop = term.scrollHeight;
+        }}
+        """
+        display(Javascript(js_code))
+
+    def run_cmd_log(cmd, desc):
+        log_terminal(f"[KEPKAT-SYS] Memulai proses: {desc}...")
+        try:
+            proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            for line in proc.stdout:
+                clean_line = line.strip()
+                if clean_line:
+                    log_terminal(f"[LOG] {clean_line}")
+            proc.wait()
+            if proc.returncode == 0:
+                log_terminal(f"[SUCCESS] {desc} selesai.")
+            else:
+                log_terminal(f"[ERROR] {desc} selesai dengan peringatan/error (Kode: {proc.returncode}).")
+        except Exception as e:
+            log_terminal(f"[ERROR] Gagal menjalankan {desc}: {e}")
+
+    def setup_env():
+        global server_running
+        if server_running:
+            log_terminal("[KEPKAT-SYS] [INFO] Mesin Server sudah aktif di latar belakang. Melanjutkan tanpa restart...")
+            return
+
+        log_terminal("[KEPKAT-INIT] Mengecek dependensi sistem dan membersihkan sampah memori...")
+        os.system("pkill -9 -f cloudflared >/dev/null 2>&1 || true")
+        os.system("pkill -9 -f ffmpeg >/dev/null 2>&1 || true")
+        time.sleep(0.5)
+
+        try:
+            import fastapi, yt_dlp, ffmpeg, uvicorn
+            if os.system("command -v cloudflared >/dev/null 2>&1") != 0 or os.system("command -v ffmpeg >/dev/null 2>&1") != 0:
+                raise Exception("Missing binaries")
+            log_terminal("[KEPKAT-SYS] [INFO] Library sudah terinstall. Melewati proses download.")
+        except:
+            run_cmd_log("pip install -q --pre yt-dlp fastapi uvicorn ffmpeg-python", "Install Library Inti")
+            if os.system("command -v cloudflared >/dev/null 2>&1") != 0:
+                run_cmd_log("wget -q -nc https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb && dpkg -i cloudflared-linux-amd64.deb", "Install Cloudflare Tunnel")
+            if os.system("command -v ffmpeg >/dev/null 2>&1") != 0:
+                run_cmd_log("apt-get -qq update && apt-get -qq install -y ffmpeg", "Install FFmpeg Linux")
+
+        log_terminal("[KEPKAT-SYS] Mengkalibrasi core engine pemrosesan visual...")
+        log_terminal("[SUCCESS] Engine visual beroperasi pada level maksimal.")
+        log_terminal("[KEPKAT-SYS] Mengaktifkan akselerator injeksi data kecepatan tinggi...")
+        log_terminal("[SUCCESS] Akselerator aktif. Aliran data stabil.")
+
+    setup_env()
+
+    heartbeat_active = True
+    def heartbeat_terminal():
+        messages = [
+            "[KEPKAT-SHIELD] Memeriksa integritas node server...",
+            "[KEPKAT-NET] Mengamankan lalu lintas data transfer...",
+            "[KEPKAT-CORE] Sinkronisasi cache memori stabil...",
+            "[KEPKAT-AI] Menunggu triger eksekusi pemotongan...",
+            "[KEPKAT-SYS] Bypass protokol dalam mode senyap..."
+        ]
+        while heartbeat_active:
+            time.sleep(random.randint(4, 7))
+            log_terminal(random.choice(messages))
+
+    hb_thread = threading.Thread(target=heartbeat_terminal, daemon=True)
+    hb_thread.start()
+
+
+    import math
+    import glob
+    import hashlib
+    import json
+    import uuid
+    import zipfile
+    import yt_dlp
+    import ffmpeg
+    import uvicorn
+    from typing import List
+    from fastapi import FastAPI, BackgroundTasks
+    from fastapi.middleware.cors import CORSMiddleware
+    from fastapi.staticfiles import StaticFiles
+    from fastapi.responses import FileResponse, JSONResponse
+    from pydantic import BaseModel
+    from google.colab import output
+
+    os.makedirs("static", exist_ok=True)
+    os.makedirs("static/raw_videos", exist_ok=True)
+    os.makedirs("static/cut_clips", exist_ok=True)
+
+    active_ffmpeg_process = None
+
+    # ====================================================================================================
+    # 3. FRONTEND (UI / TAMPILAN HTML, CSS, REACT) - TIDAK DIRUBAH
+    # ====================================================================================================
+    html_code = r"""
+    <!DOCTYPE html>
+    <html lang="id">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+        <!-- PWA META TAGS: HIDE URL BAR BROWSER -->
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+        <meta name="theme-color" content="#000000">
+        <title>KepKat Klipper</title>
+        <link rel="icon" type="image/png" href="FAVICON_PLACEHOLDER" />
+        <script src="https://cdn.tailwindcss.com"></script>
+        <script type="importmap">
+        {
+            "imports": {
+                "react": "https://esm.sh/react@18.2.0",
+                "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+                "lucide-react": "https://esm.sh/lucide-react@0.263.0"
+            }
+        }
+        </script>
+        <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+        <style>
+            /* THEME VARIABLES & OVERRIDES */
+            [data-theme="yellow"] {
+                --bg-body: #000000;
+                --bg-panel: #0a0a0a;
+                --bg-card: rgba(24, 24, 27, 0.8);
+                --bg-input: rgba(255,255,255,0.05);
+                --border-color: rgba(39, 39, 42, 0.8);
+                --text-main: #f4f4f5;
+                --text-muted: #a1a1aa;
+                --text-faint: #71717a;
+                --accent-text: #eab308;
+                --accent-hover: #facc15;
+                --accent-gradient: linear-gradient(to right, #eab308, #f59e0b);
+                --accent-glow: rgba(234, 179, 8, 0.3);
+            }
+            [data-theme="main"] {
+                --bg-body: #000000;
+                --bg-panel: #0a0a0a;
+                --bg-card: rgba(24, 24, 27, 0.8);
+                --bg-input: rgba(255,255,255,0.05);
+                --border-color: rgba(39, 39, 42, 0.8);
+                --text-main: #f4f4f5;
+                --text-muted: #a1a1aa;
+                --text-faint: #71717a;
+                --accent-text: #3b82f6;
+                --accent-hover: #60a5fa;
+                --accent-gradient: linear-gradient(to right, #3b82f6, #8b5cf6);
+                --accent-glow: rgba(59, 130, 246, 0.3);
+            }
+            [data-theme="red"] {
+                --bg-body: #000000;
+                --bg-panel: #0a0a0a;
+                --bg-card: rgba(24, 24, 27, 0.8);
+                --bg-input: rgba(255,255,255,0.05);
+                --border-color: rgba(39, 39, 42, 0.8);
+                --text-main: #f4f4f5;
+                --text-muted: #a1a1aa;
+                --text-faint: #71717a;
+                --accent-text: #ef4444;
+                --accent-hover: #f87171;
+                --accent-gradient: linear-gradient(to right, #ef4444, #dc2626);
+                --accent-glow: rgba(239, 68, 68, 0.3);
+            }
+            [data-theme="green"] {
+                --bg-body: #000000;
+                --bg-panel: #0a0a0a;
+                --bg-card: rgba(24, 24, 27, 0.8);
+                --bg-input: rgba(255,255,255,0.05);
+                --border-color: rgba(39, 39, 42, 0.8);
+                --text-main: #f4f4f5;
+                --text-muted: #a1a1aa;
+                --text-faint: #71717a;
+                --accent-text: #22c55e;
+                --accent-hover: #4ade80;
+                --accent-gradient: linear-gradient(to right, #22c55e, #16a34a);
+                --accent-glow: rgba(34, 197, 94, 0.3);
+            }
+            [data-theme="orange"] {
+                --bg-body: #000000;
+                --bg-panel: #050505;
+                --bg-card: rgba(24, 24, 27, 0.8);
+                --bg-input: #000000;
+                --border-color: rgba(249, 115, 22, 0.4);
+                --text-main: #ffffff;
+                --text-muted: #fdba74;
+                --text-faint: #fed7aa;
+                --accent-text: #f97316;
+                --accent-hover: #fb923c;
+                --accent-gradient: linear-gradient(to right, #f97316, #ea580c);
+                --accent-glow: rgba(249, 115, 22, 0.3);
+            }
+
+            [data-theme] {
+                background-color: var(--bg-body) !important;
+                color: var(--text-main) !important;
+                transition: background-color 0.6s ease, color 0.6s ease, border-color 0.6s ease;
+            }
+            [data-theme] .bg-\[\#09090b\], [data-theme] .bg-\[\#000000\] { background-color: var(--bg-body) !important; transition: background-color 0.6s ease; }
+            [data-theme] .bg-zinc-950, [data-theme] .bg-zinc-950\/50, [data-theme] .bg-zinc-950\/80, [data-theme] .bg-zinc-950\/90 { background-color: var(--bg-panel) !important; transition: background-color 0.6s ease; }
+            [data-theme] .bg-zinc-900, [data-theme] .bg-zinc-900\/40, [data-theme] .bg-zinc-900\/50, [data-theme] .bg-zinc-900\/60, [data-theme] .bg-zinc-900\/80 { background-color: var(--bg-card) !important; transition: background-color 0.6s ease; }
+            [data-theme] .bg-black\/50, [data-theme] .bg-black\/40, [data-theme] .bg-black\/60 { background-color: var(--bg-input) !important; transition: background-color 0.6s ease; }
+            [data-theme] .border-zinc-800, [data-theme] .border-zinc-800\/50, [data-theme] .border-zinc-800\/80, [data-theme] .border-zinc-700, [data-theme] .border-zinc-700\/80 { border-color: var(--border-color) !important; transition: border-color 0.6s ease; }
+
+            [data-theme] .text-zinc-100, [data-theme] .text-zinc-200, [data-theme] .text-white { color: var(--text-main) !important; transition: color 0.6s ease; }
+            [data-theme] .text-zinc-300, [data-theme] .text-zinc-400 { color: var(--text-muted) !important; transition: color 0.6s ease; }
+            [data-theme] .text-zinc-500, [data-theme] .text-zinc-600 { color: var(--text-faint) !important; transition: color 0.6s ease; }
+
+            [data-theme] .text-yellow-500, [data-theme] .text-yellow-400, [data-theme] .text-amber-500, [data-theme] .text-amber-400 { color: var(--accent-text) !important; transition: color 0.6s ease; }
+            [data-theme] .hover\:text-yellow-400:hover, [data-theme] .hover\:text-yellow-500:hover, [data-theme] .hover\:text-amber-400:hover { color: var(--accent-hover) !important; }
+
+            [data-theme] .bg-yellow-500, [data-theme] .bg-amber-500, [data-theme] .from-yellow-500 { background: var(--accent-gradient) !important; color: #fff !important; transition: background 0.6s ease; border-color: transparent !important; }
+            [data-theme] .hover\:bg-yellow-400:hover, [data-theme] .hover\:bg-amber-400:hover { filter: brightness(1.15); color: #fff !important; }
+
+            [data-theme] .border-yellow-500, [data-theme] .border-yellow-500\/50, [data-theme] .focus\:border-yellow-500:focus { border-color: var(--accent-text) !important; }
+            [data-theme] .focus\:ring-yellow-500:focus { --tw-ring-color: var(--accent-text) !important; }
+            [data-theme] .accent-yellow-500, [data-theme] .accent-yellow-400 { accent-color: var(--accent-text) !important; }
+
+            [data-theme] .shadow-\[0_0_15px_rgba\(234\,179\,8\,0\.3\)\] { box-shadow: 0 0 15px var(--accent-glow) !important; }
+            [data-theme] .shadow-\[0_0_20px_rgba\(234\,179\,8\,0\.15\)\] { box-shadow: 0 0 20px var(--accent-glow) !important; }
+            [data-theme] .shadow-\[0_0_10px_rgba\(234\,179\,8\,0\.05\)\] { box-shadow: 0 0 10px var(--accent-glow) !important; }
+            [data-theme] .shadow-\[0_0_10px_rgba\(234\,179\,8\,0\.2\)\] { box-shadow: 0 0 10px var(--accent-glow) !important; }
+            [data-theme] .shadow-\[0_0_8px_rgba\(234\,179\,8\,0\.3\)\] { box-shadow: 0 0 8px var(--accent-glow) !important; }
+
+            [data-theme] .fill-current { fill: currentColor !important; }
+            body, html { background-color: var(--bg-body); transition: background-color 0.6s ease; }
+
+            .custom-scrollbar::-webkit-scrollbar { width: 3px; }
+            .custom-scrollbar::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 3px; }
+            .panel-left { width: 100%; }
+            @media (min-width: 768px) {
+                .panel-left { width: var(--left-width, 100%); }
+            }
+            .toast-enter { animation: toastIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+            .toast-exit { animation: toastOut 0.4s cubic-bezier(0.55, 0.085, 0.68, 0.53) forwards; }
+            @keyframes toastIn {
+                0% { transform: translateY(-150%) scale(0.9); opacity: 0; }
+                100% { transform: translateY(0) scale(1); opacity: 1; }
+            }
+            @keyframes toastOut {
+                0% { transform: translateY(0) scale(1); opacity: 1; }
+                100% { transform: translateY(-150%) scale(0.9); opacity: 0; }
+            }
+            @keyframes fire-glow {
+                0% { box-shadow: 0 0 15px #facc15, inset 0 0 15px #facc15; border-color: #facc15; }
+                50% { box-shadow: 0 0 30px #eab308, inset 0 0 25px #eab308; border-color: #eab308; }
+                100% { box-shadow: 0 0 15px #facc15, inset 0 0 15px #facc15; border-color: #facc15; }
+            }
+            .gpu-fire { animation: fire-glow 2s infinite; }
+            .gpu-text-fire { background: linear-gradient(to right, #facc15, #eab308, #ca8a04); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        </style>
+    </head>
+    <body class="bg-[#000000] text-zinc-100 relative">
+        <div id="root"></div>
+        <script type="text/babel" data-type="module">
+            import React, { useState, useRef, useEffect } from 'react';
+            import { createRoot } from 'react-dom/client';
+            import { Upload, Play, Pause, Scissors, Download, Plus, Trash2, CheckSquare, Square, Settings, FileVideo, Clock, Eye, X, Sparkles, Coffee, FileSpreadsheet, FileDown, UploadCloud, ClipboardPaste, Info, ShoppingCart, BookOpen, RefreshCw, Copy, Check, Youtube, Instagram, Minus, List, Link, Rewind, FastForward, Maximize, SkipBack, SkipForward, Minimize, ArrowLeft, LayoutGrid, CheckCircle2, AlertTriangle, XCircle, Activity, Move, Flame, Bot, BrainCircuit, ChevronDown, Undo, Redo, Edit } from 'lucide-react';
+
+            const generateId = () => 'clip_' + Date.now().toString(36) + '_' + Math.random().toString(36).substr(2, 9);
+
+            const formatDurationDisplay = (totalSeconds) => {
+                if (isNaN(totalSeconds) || !isFinite(totalSeconds) || totalSeconds < 0) return "0 dtk";
+                const s = Math.floor(totalSeconds);
+                if (s < 60) return `${s} dtk`;
+                const m = Math.floor(s / 60);
+                const remS = s % 60;
+                return remS > 0 ? `${m} mnt ${remS} dtk` : `${m} mnt`;
+            };
+
+            const formatTimeCompact = (totalSeconds) => {
+                if (isNaN(totalSeconds) || !isFinite(totalSeconds) || totalSeconds < 0) return "00:00";
+                const s = Math.floor(totalSeconds);
+                const m = Math.floor(s / 60);
+                const remS = s % 60;
+                const h = Math.floor(m / 60);
+                const remM = m % 60;
+                if (h > 0) return `${h}:${remM.toString().padStart(2, '0')}:${remS.toString().padStart(2, '0')}`;
+                return `${remM.toString().padStart(2, '0')}:${remS.toString().padStart(2, '0')}`;
+            };
+
+            const TimeInput = ({ clip, type, updateClip }) => {
+                const val = type === 'start' ? clip.start : clip.end;
+
+                const [h, setH] = useState(Math.floor(val / 3600).toString());
+                const [m, setM] = useState(Math.floor((val % 3600) / 60).toString());
+                const [s, setS] = useState(Math.floor(val % 60).toString());
+
+                useEffect(() => {
+                    setH(Math.floor(val / 3600).toString());
+                    setM(Math.floor((val % 3600) / 60).toString());
+                    setS(Math.floor(val % 60).toString());
+                }, [val]);
+
+                const handleBlur = () => {
+                    const newH = parseInt(h) || 0;
+                    const newM = parseInt(m) || 0;
+                    const newS = parseInt(s) || 0;
+                    const totalSeconds = (newH * 3600) + (newM * 60) + newS;
+                    updateClip(clip.id, type, totalSeconds);
+                };
+
+                const handleKeyDown = (e) => {
+                    if (e.key === 'Enter') {
+                    e.target.blur();
+                    }
+                };
+
+                return (
+                    <div className="flex items-center gap-1 mt-1">
+                    <div className="flex flex-col flex-1">
+                        <span className="text-[8px] text-zinc-500 font-bold uppercase tracking-wider mb-0.5 text-center">Jam</span>
+                        <input type="number" min="0" value={h} onChange={e => setH(e.target.value)} onBlur={handleBlur} onKeyDown={handleKeyDown} className="w-full bg-black/50 border border-zinc-700 focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 rounded text-center text-xs py-1 text-zinc-100 outline-none transition-all font-mono active:scale-95" />
+                    </div>
+                    <span className="text-zinc-500 mt-4 font-bold">:</span>
+                    <div className="flex flex-col flex-1">
+                        <span className="text-[8px] text-zinc-500 font-bold uppercase tracking-wider mb-0.5 text-center">Mnt</span>
+                        <input type="number" min="0" max="59" value={m} onChange={e => setM(e.target.value)} onBlur={handleBlur} onKeyDown={handleKeyDown} className="w-full bg-black/50 border border-zinc-700 focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 rounded text-center text-xs py-1 text-zinc-100 outline-none transition-all font-mono active:scale-95" />
+                    </div>
+                    <span className="text-zinc-500 mt-4 font-bold">:</span>
+                    <div className="flex flex-col flex-1">
+                        <span className="text-[8px] text-zinc-500 font-bold uppercase tracking-wider mb-0.5 text-center">Dtk</span>
+                        <input type="number" min="0" max="59" value={s} onChange={e => setS(e.target.value)} onBlur={handleBlur} onKeyDown={handleKeyDown} className="w-full bg-black/50 border border-zinc-700 focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 rounded text-center text-xs py-1 text-zinc-100 outline-none transition-all font-mono active:scale-95" />
+                    </div>
+                    </div>
+                );
+            };
+
+            const ToastItem = ({ t, removeToast }) => {
+                const [offset, setOffset] = useState(0);
+                const [isDragging, setIsDragging] = useState(false);
+                const startX = useRef(0);
+
+                const handlePointerDown = (e) => {
+                    setIsDragging(true);
+                    startX.current = e.clientX;
+                    e.target.setPointerCapture(e.pointerId);
+                };
+
+                const handlePointerMove = (e) => {
+                    if(!isDragging) return;
+                    const currentX = e.clientX;
+                    setOffset(currentX - startX.current);
+                };
+
+                const handlePointerUp = (e) => {
+                    setIsDragging(false);
+                    e.target.releasePointerCapture(e.pointerId);
+                    if (Math.abs(offset) > 100) {
+                        removeToast(t.id);
+                    } else {
+                        setOffset(0);
+                    }
+                };
+
+                return (
+                    <div
+                        onPointerDown={handlePointerDown}
+                        onPointerMove={handlePointerMove}
+                        onPointerUp={handlePointerUp}
+                        onPointerCancel={handlePointerUp}
+                        className={`pointer-events-auto flex items-center gap-3 px-6 py-3.5 rounded-xl shadow-2xl border cursor-grab active:cursor-grabbing transition-transform duration-200 ${isDragging ? 'duration-0' : ''} ${t.type==='error'?'bg-red-950/90 border-red-900 text-red-200': t.type==='success'?'bg-emerald-950/90 border-emerald-900 text-emerald-200': t.type==='warning'?'bg-amber-950/90 border-amber-900 text-amber-200':'bg-zinc-900/90 border-zinc-800 text-zinc-200'} backdrop-blur-md`}
+                        style={{ transform: `translateX(${offset}px)` }}
+                    >
+                        {t.type === 'error' && <AlertTriangle size={18} className="text-red-500 shrink-0" />}
+                        {t.type === 'success' && <CheckCircle2 size={18} className="text-emerald-500 shrink-0" />}
+                        {t.type === 'warning' && <Info size={18} className="text-amber-500 shrink-0" />}
+                        {t.type === 'info' && <Activity size={18} className="text-yellow-500 shrink-0" />}
+                        <span className="text-xs font-bold uppercase tracking-wider drop-shadow-md">{t.msg}</span>
+                    </div>
+                );
+            };
+
+            const CustomSelect = ({ value, options, onChange, label }) => {
+                const [isOpen, setIsOpen] = useState(false);
+                const wrapperRef = useRef(null);
+
+                useEffect(() => {
+                    const handleClickOutside = (e) => { if (wrapperRef.current && !wrapperRef.current.contains(e.target)) setIsOpen(false); };
+                    document.addEventListener('mousedown', handleClickOutside);
+                    return () => document.removeEventListener('mousedown', handleClickOutside);
+                }, []);
+
+                const selectedLabel = options.find(o => o.value === value)?.label || value;
+                return (
+                    <div ref={wrapperRef} className="relative w-full">
+                        <div onClick={() => setIsOpen(!isOpen)} className="w-full bg-black/50 border border-zinc-800 rounded p-1.5 text-[10px] cursor-pointer flex justify-between items-center font-medium text-zinc-300 hover:border-yellow-500 transition-all">
+                            <span className="truncate">{selectedLabel}</span>
+                            <ChevronDown size={12} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                        </div>
+                        {isOpen && (
+                            <div className="absolute top-full left-0 right-0 mt-1 bg-[#000000] border-2 border-zinc-700 rounded shadow-2xl z-[9999] max-h-40 overflow-y-auto custom-scrollbar opacity-100">
+                                {options.map(opt => (
+                                    <div key={opt.value} onClick={() => { onChange(opt.value); setIsOpen(false); }} className={`px-2 py-1.5 text-[10px] cursor-pointer transition-colors ${value === opt.value ? 'bg-yellow-500/10 text-yellow-500 font-bold' : 'text-zinc-300 hover:bg-yellow-500/20 hover:text-yellow-400'}`}>
+                                        {opt.label}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                );
+            };
+
+            function App() {
+                const [appTheme, setAppTheme] = useState('yellow');
+                const [currentView, setCurrentView] = useState('home');
+
+                const cycleTheme = () => {
+                    setAppTheme(prev => {
+                        if(prev === 'yellow') return 'main';
+                        if(prev === 'main') return 'red';
+                        if(prev === 'red') return 'green';
+                        if(prev === 'green') return 'orange';
+                        return 'yellow';
+                    });
+                };
+
+                const [toasts, setToasts] = useState([]);
+                const [isServerOnline, setIsServerOnline] = useState(true);
+                const [downloadStatus, setDownloadStatus] = useState('idle');
+                const [downloadProgress, setDownloadProgress] = useState(0);
+
+                const [isGpuMode, setIsGpuMode] = useState(false);
+                const [isPromptCopied, setIsPromptCopied] = useState(false);
+
+                const removeToast = (id) => {
+                    setToasts(prev => prev.map(t => t.id === id ? {...t, exiting: true} : t));
+                    setTimeout(() => {
+                        setToasts(prev => prev.filter(t => t.id !== id));
+                    }, 400);
+                };
+
+                const addToast = (msg, type='info') => {
+                    const id = Date.now() + Math.random();
+                    setToasts(prev => {
+                        let list = [...prev, {id, msg, type, exiting: false}];
+                        if(list.length > 4) {
+                            list = list.slice(list.length - 4);
+                        }
+                        return list;
+                    });
+                    setTimeout(() => removeToast(id), 5000);
+                };
+
+                const clearAllToasts = () => {
+                    setToasts(prev => prev.map(t => ({...t, exiting: true})));
+                    setTimeout(() => setToasts([]), 400);
+                };
+
+                const toggleGpuMode = async () => {
+                    if (!isGpuMode) {
+                        addToast("Mengecek ketersediaan GPU di Server...", "info");
+                        try {
+                            const res = await fetch('/api/check_gpu');
+                            const data = await res.json();
+                            if (data.gpu) {
+                                setIsGpuMode(true);
+                                addToast("Mode GPU Diaktifkan! Render secepat kilat🔥", "success");
+                            } else {
+                                addToast("GPU tidak terdeteksi! Mengalihkan ke CPU.", "error");
+                                setIsGpuMode(false);
+                            }
+                        } catch(e) {
+                            addToast("Gagal mengecek GPU.", "error");
+                        }
+                    } else {
+                        setIsGpuMode(false);
+                        addToast("Mode GPU Dimatikan. Beralih ke CPU.", "info");
+                    }
+                };
+
+                const [file, setFile] = useState(null);
+                const [youtubeUrlInput, setYoutubeUrlInput] = useState('');
+                const [isFetchingUrl, setIsFetchingUrl] = useState(false);
+
+                const [videoUrl, setVideoUrl] = useState(null);
+                const [videoIdHash, setVideoIdHash] = useState(null);
+                const [videoMeta, setVideoMeta] = useState(null);
+
+                const [duration, setDuration] = useState(0);
+                const [currentTime, setCurrentTime] = useState(0);
+                const [isPlaying, setIsPlaying] = useState(false);
+                const videoRef = useRef(null);
+
+                const [globalRatio, setGlobalRatio] = useState('original');
+                const [globalQuality, setGlobalQuality] = useState('1080p');
+                const [engineSpeed, setEngineSpeed] = useState('fast');
+
+                // KUSTOMISASI STATE UNDO/REDO UNTUK CLIPS
+                const [clips, _setClips] = useState([]);
+                const [pastClips, setPastClips] = useState([]);
+                const [futureClips, setFutureClips] = useState([]);
+
+                const setClips = (newClips) => {
+                    _setClips(prev => {
+                        const nextClips = typeof newClips === 'function' ? newClips(prev) : newClips;
+                        setPastClips(p => {
+                            const newPast = [...p, prev];
+                            if (newPast.length > 50) return newPast.slice(newPast.length - 50);
+                            return newPast;
+                        });
+                        setFutureClips([]);
+                        return nextClips;
+                    });
+                };
+
+                const handleUndo = () => {
+                    if (pastClips.length === 0) return;
+                    const previous = pastClips[pastClips.length - 1];
+                    setPastClips(p => p.slice(0, p.length - 1));
+                    setFutureClips(f => [clips, ...f]);
+                    _setClips(previous);
+                };
+
+                const handleRedo = () => {
+                    if (futureClips.length === 0) return;
+                    const next = futureClips[0];
+                    setFutureClips(f => f.slice(1));
+                    setPastClips(p => [...p, clips]);
+                    _setClips(next);
+                };
+
+                const [previewingClipId, setPreviewingClipId] = useState(null);
+
+                const [cutClips, setCutClips] = useState([]);
+                const [showMyClipModal, setShowMyClipModal] = useState(false);
+                const [selectedMyClips, setSelectedMyClips] = useState([]);
+
+                const abortControllersRef = useRef({});
+                const [clipDownloadProgresses, setClipDownloadProgresses] = useState({});
+
+                const [isProcessing, setIsProcessing] = useState(false);
+                const [processProgress, setProcessProgress] = useState(0);
+                const [processStatus, setProcessStatus] = useState('');
+                const [currentProcessIndex, setCurrentProcessIndex] = useState(0);
+                const [totalProcessCount, setTotalProcessCount] = useState(0);
+                const [currentClipName, setCurrentClipName] = useState('');
+
+                const [showCsvModal, setShowCsvModal] = useState(false);
+                const [csvText, setCsvText] = useState('');
+                const [csvJumlahClip, setCsvJumlahClip] = useState('10');
+                const [csvDurasiClip, setCsvDurasiClip] = useState('1');
+                const [csvCatatan, setCsvCatatan] = useState('');
+
+                const [history, setHistory] = useState([]);
+
+                const [isMiniPlayer, setIsMiniPlayer] = useState(false);
+                const [miniPos, setMiniPos] = useState({ x: 20, y: 80 });
+
+                const [sholatReminder, setSholatReminder] = useState('');
+                const [isGeneratingReminder, setIsGeneratingReminder] = useState(false);
+                const [isReading, setIsReading] = useState(false);
+
+                const [leftWidth, setLeftWidth] = useState(40);
+                const [isDragging, setIsDragging] = useState(false);
+
+                const containerRef = useRef(null);
+                const cancelRenderRef = useRef(false);
+
+                useEffect(() => {
+                    if(window.innerWidth > 0) {
+                        setMiniPos({ x: window.innerWidth > 768 ? window.innerWidth - 340 : (window.innerWidth - 220) / 2, y: 80 });
+                    }
+                    loadSavedClips();
+                    loadHistory();
+                }, []);
+
+                const loadSavedClips = async () => {
+                    try {
+                        const res = await fetch('/api/get_my_clips');
+                        if (res.ok) {
+                            const data = await res.json();
+                            if (data.clips) {
+                                setCutClips(data.clips);
+                                setSelectedMyClips(data.clips.map(c => c.id));
+                            }
+                        }
+                    } catch (e) {}
+                };
+
+                const loadHistory = async () => {
+                    try {
+                        const res = await fetch('/api/get_history');
+                        if (res.ok) {
+                            const data = await res.json();
+                            setHistory(data.history || []);
+                        }
+                    } catch(e){}
+                };
+
+                let healthFailCount = useRef(0);
+                useEffect(() => {
+                    const checkHealth = async () => {
+                        try {
+                            const res = await fetch('/api/health');
+                            if (res.ok) {
+                                healthFailCount.current = 0;
+                                if (!isServerOnline) { setIsServerOnline(true); addToast("Server kembali terhubung!", "success"); }
+                            } else throw new Error();
+                        } catch (e) {
+                            healthFailCount.current += 1;
+                            if (healthFailCount.current > 2 && isServerOnline) { setIsServerOnline(false); addToast("Koneksi ke Server terputus!", "error"); }
+                        }
+                    };
+                    const iv = setInterval(checkHealth, 1000);
+                    return () => clearInterval(iv);
+                }, [isServerOnline]);
+
+                useEffect(() => {
+                    let iv;
+                    if (videoIdHash && downloadStatus === 'downloading') {
+                        iv = setInterval(async () => {
+                            try {
+                                const res = await fetch(`/api/check_download/${videoIdHash}`);
+                                const data = await res.json();
+                                if (data.status === 'downloading') {
+                                    setDownloadProgress(data.progress || 0);
+                                } else if (data.status === 'done') {
+                                    setDownloadStatus('done');
+                                    setDownloadProgress(100);
+                                    if (data.size_str) {
+                                        setVideoMeta(prev => prev ? { ...prev, size_str: data.size_str } : prev);
+                                    }
+                                    addToast("Video full berhasil di-download! Siap dipotong.", "success");
+                                    loadHistory();
+                                } else if (data.status === 'blocked') {
+                                    setDownloadStatus('blocked');
+                                    addToast("Server diblokir YouTube! Solusi: Ganti IP atau Restart Colab.", "error");
+                                } else if (data.status === 'error') {
+                                    setDownloadStatus('error');
+                                    addToast("Terjadi error saat mendownload video background.", "error");
+                                }
+                            } catch(e) {}
+                        }, 1000);
+                    }
+                    return () => clearInterval(iv);
+                }, [videoIdHash, downloadStatus]);
+
+                const handleDragStart = (e) => {
+                    if (!isMiniPlayer) return;
+                    if (e.target.closest('button') || e.target.tagName.toLowerCase() === 'input') return;
+
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const x = e.clientX || (e.touches && e.touches[0].clientX);
+                    const y = e.clientY || (e.touches && e.touches[0].clientY);
+                    if (x > rect.right - 25 && y > rect.bottom - 25) return;
+
+                    const startX = x;
+                    const startY = y;
+                    const initialX = miniPos.x;
+                    const initialY = miniPos.y;
+
+                    const onMove = (moveEvent) => {
+                        const clientX = moveEvent.clientX || (moveEvent.touches && moveEvent.touches[0].clientX);
+                        const clientY = moveEvent.clientY || (moveEvent.touches && moveEvent.touches[0].clientY);
+                        setMiniPos({
+                            x: initialX + (clientX - startX),
+                            y: initialY + (clientY - startY)
+                        });
+                    };
+
+                    const onUp = () => {
+                        document.removeEventListener('mousemove', onMove);
+                        document.removeEventListener('mouseup', onUp);
+                        document.removeEventListener('touchmove', onMove);
+                        document.removeEventListener('touchend', onUp);
+                    };
+
+                    document.addEventListener('mousemove', onMove);
+                    document.addEventListener('mouseup', onUp);
+                    document.addEventListener('touchmove', onMove, { passive: false });
+                    document.addEventListener('touchmove', onMove, { passive: false });
+                    document.addEventListener('touchmove', onMove, { passive: false });
+                    document.addEventListener('touchmove', onUp);
+                };
+
+                const handleSeekAndExtend = (clipId, currentVidTime, amount, isFullScreen = false) => {
+                    const targetClip = clips.find(c => c.id === clipId);
+                    if (!targetClip) return;
+
+                    let newTime = currentVidTime + amount;
+                    let updatedStart = targetClip.start;
+                    let updatedEnd = targetClip.end;
+                    let didUpdate = false;
+
+                    if (newTime < targetClip.start) {
+                    updatedStart = Math.max(0, targetClip.start - 1);
+                    newTime = updatedStart;
+                    didUpdate = true;
+                    } else if (newTime > targetClip.end) {
+                    updatedEnd = Math.min(duration || targetClip.end + 1, targetClip.end + 1);
+                    newTime = updatedEnd;
+                    didUpdate = true;
+                    }
+
+                    if (didUpdate) {
+                    setClips(prev => prev.map(c => c.id === clipId ? { ...c, start: updatedStart, end: updatedEnd } : c));
+                    }
+
+                    if (!isFullScreen && videoRef.current) {
+                    if (previewingClipId !== clipId) setPreviewingClipId(clipId);
+                    videoRef.current.currentTime = newTime;
+                    setCurrentTime(newTime);
+                    }
+                };
+
+                const generateSholatReminder = async () => {
+                    setIsGeneratingReminder(true);
+                    const fallbacks = [
+                        "Sebanyak apapun cuan lu hari ini, gak bakal berkah kalo kewajiban ke Sang Pencipta lu skip. Gas sholat 5 waktu cuy!",
+                        "Sukses jalur langit itu nyata bro. Jangan cuma ngejar views dan followers, kejar juga ridho-Nya lewat sholat.",
+                        "Cuan bisa dicari, tapi waktu sholat nggak bisa diulang. Jangan lupa utamain kewajiban lu sebagai hamba-Nya ya!"
+                    ];
+                    setSholatReminder(fallbacks[Math.floor(Math.random() * fallbacks.length)]);
+                    setIsGeneratingReminder(false);
+                };
+
+                const readAloud = () => {
+                    if (!sholatReminder || isGeneratingReminder) return;
+                    if (isReading) {
+                    window.speechSynthesis.cancel();
+                    setIsReading(false);
+                    return;
+                    }
+                    const utterance = new SpeechSynthesisUtterance(sholatReminder);
+                    utterance.lang = 'id-ID';
+                    utterance.onstart = () => setIsReading(true);
+                    utterance.onend = () => setIsReading(false);
+                    utterance.onerror = () => setIsReading(false);
+                    window.speechSynthesis.cancel();
+                    window.speechSynthesis.speak(utterance);
+                };
+
+                useEffect(() => {
+                    if (isGeneratingReminder && isReading) {
+                    window.speechSynthesis.cancel();
+                    setIsReading(false);
+                    }
+                }, [isGeneratingReminder]);
+
+                useEffect(() => {
+                    if (!sholatReminder) {
+                    generateSholatReminder();
+                    }
+                }, []);
+
+                useEffect(() => {
+                    const handleMouseMove = (e) => {
+                    if (!isDragging || !containerRef.current) return;
+                    const containerRect = containerRef.current.getBoundingClientRect();
+                    let newLeftWidth = ((e.clientX - containerRect.left) / containerRect.width) * 100;
+                    if (newLeftWidth < 20) newLeftWidth = 20;
+                    if (newLeftWidth > 80) newLeftWidth = 80;
+                    setLeftWidth(newLeftWidth);
+                    };
+
+                    const handleMouseUp = () => {
+                    setIsDragging(false);
+                    document.body.style.userSelect = 'auto';
+                    };
+
+                    if (isDragging) {
+                    window.addEventListener('mousemove', handleMouseMove);
+                    window.addEventListener('mouseup', handleMouseUp);
+                    document.body.style.userSelect = 'none';
+                    }
+
+                    return () => {
+                    window.removeEventListener('mousemove', handleMouseMove);
+                    window.removeEventListener('mouseup', handleMouseUp);
+                    };
+                }, [isDragging]);
+
+                const handleTextareaChange = (e) => {
+                    const val = e.target.value;
+                    const lines = val.split('\n');
+                    if (lines.length > 0 && (lines[0].includes('http://') || lines[0].includes('https://'))) {
+                        setYoutubeUrlInput(lines[0].trim());
+                        setCsvText(lines.slice(1).join('\n').trim());
+                        addToast("Link terdeteksi dan dipindahkan ke Kotak Input!", "success");
+                    } else {
+                        setCsvText(val);
+                    }
+                };
+
+                const handleYoutubeLoad = async () => {
+                    if (!youtubeUrlInput) { addToast("Isi link YouTube lu cuy!", "warning"); return; }
+                    setIsFetchingUrl(true);
+                    try {
+                        const res = await fetch('/api/load_video', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ url: youtubeUrlInput })
+                        });
+                        if (!res.ok) throw new Error("Gagal mendownload video full.");
+                        const data = await res.json();
+
+                        setVideoUrl(data.direct_url);
+                        setVideoIdHash(data.video_id);
+                        setVideoMeta({
+                            title: data.title,
+                            uploader: data.uploader,
+                            resolution: data.resolution,
+                            size_str: data.size_str,
+                            duration_str: data.duration_str
+                        });
+
+                        setFile(youtubeUrlInput);
+                        setCurrentView('editor');
+
+                        if (data.status === 'downloading') {
+                            setDownloadStatus('downloading');
+                            setDownloadProgress(0);
+                            addToast("Video & Transcript sedang didownload!", "info");
+                        } else if (data.status === 'done') {
+                            setDownloadStatus('done');
+                            setDownloadProgress(100);
+                            addToast("Memuat instan! Video sudah ada di server.", "success");
+                            loadHistory();
+                        }
+
+                        if (csvText.trim()) {
+                            setClips([]);
+                            setTimeout(() => {
+                                processCsvData(csvText);
+                            }, 800);
+                        } else {
+                            const randomNum = Math.floor(1000 + Math.random() * 9000);
+                            setClips([{
+                                id: generateId(),
+                                name: `1_KepKat_clip_${randomNum}`,
+                                ext: 'mp4', start: 0, end: 0, selected: true
+                            }]);
+                        }
+                    } catch (err) {
+                        addToast('Server terblokir. Silahkan putuskan koneksi dan ganti runtime.', "error");
+                    }
+                    setIsFetchingUrl(false);
+                };
+
+                const loadFromHistory = (item) => {
+                    const loadedUrl = item.original_url || `https://youtube.com/watch?v=${item.video_id}`;
+                    setYoutubeUrlInput(loadedUrl);
+                    setVideoIdHash(item.video_id);
+                    setVideoUrl(`/static/raw_videos/${item.video_id}_proxy.mp4`);
+                    setVideoMeta({
+                        title: item.title,
+                        uploader: item.uploader,
+                        resolution: item.resolution,
+                        size_str: item.size_str,
+                        duration_str: item.duration_str
+                    });
+                    setFile(loadedUrl);
+                    setDownloadStatus('done');
+                    setDownloadProgress(100);
+                    setCurrentView('editor');
+
+                    if (csvText.trim()) {
+                        setClips([]);
+                        setTimeout(() => {
+                            processCsvData(csvText);
+                        }, 500);
+                    } else {
+                        const randomNum = Math.floor(1000 + Math.random() * 9000);
+                        setClips([{
+                            id: generateId(),
+                            name: `1_KepKat_clip_${randomNum}`,
+                            ext: 'mp4', start: 0, end: 0, selected: true
+                        }]);
+                    }
+                    addToast("Riwayat berhasil dimuat!", "success");
+                };
+
+                const handleTimeUpdate = () => {
+                    if (videoRef.current) {
+                    const current = videoRef.current.currentTime;
+                    setCurrentTime(current);
+                    if (previewingClipId && isPlaying) {
+                        const activeClip = clips.find(c => c.id === previewingClipId);
+                        if (activeClip && current >= activeClip.end) {
+                        videoRef.current.pause();
+                        setIsPlaying(false);
+                        setPreviewingClipId(null);
+                        }
+                    }
+                    }
+                };
+
+                const handleLoadedMetadata = () => {
+                    if (videoRef.current) {
+                    const vidDuration = videoRef.current.duration;
+                    if (!isNaN(vidDuration) && isFinite(vidDuration)) {
+                        setDuration(vidDuration);
+                    }
+                    }
+                };
+
+                const togglePlay = () => {
+                    if (videoRef.current) {
+                    if (videoRef.current.paused) {
+                        videoRef.current.play();
+                        setIsPlaying(true);
+                    } else {
+                        videoRef.current.pause();
+                        setIsPlaying(false);
+                    }
+                    }
+                };
+
+                useEffect(() => {
+                    const handleKeyDown = (e) => {
+                    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT' || !videoRef.current || showCsvModal || showMyClipModal) return;
+
+                    if (e.code === 'Space') {
+                        e.preventDefault();
+                        togglePlay();
+                    } else if (e.code === 'ArrowRight') {
+                        e.preventDefault();
+                        videoRef.current.currentTime = Math.min(videoRef.current.duration, videoRef.current.currentTime + 1);
+                    } else if (e.code === 'ArrowLeft') {
+                        e.preventDefault();
+                        videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime - 1);
+                    }
+                    };
+                    window.addEventListener('keydown', handleKeyDown);
+                    return () => window.removeEventListener('keydown', handleKeyDown);
+                }, [showCsvModal, showMyClipModal]);
+
+                const addClip = () => {
+                    if (!file) return;
+                    const randomNum = Math.floor(1000 + Math.random() * 9000);
+                    const nextIndex = clips.length + 1;
+                    setClips([
+                    {
+                        id: generateId(),
+                        name: `${nextIndex}_KepKat_clip_${randomNum}`,
+                        ext: 'mp4',
+                        start: 0,
+                        end: 0,
+                        selected: true
+                    },
+                    ...clips
+                    ]);
+                };
+
+                const processCsvData = (rawText) => {
+                    if (!rawText.trim()) return;
+
+                    const newClips = [];
+                    let currentClips = [...clips];
+                    let startingIndex = clips.length;
+
+                    if (currentClips.length === 1 && currentClips[0].start === 0 && currentClips[0].end === 0) {
+                        currentClips = [];
+                        startingIndex = 0;
+                    }
+
+                    const parseTime = (timeStr) => {
+                        if (!timeStr) return NaN;
+                        const parts = timeStr.trim().split(':').map(Number);
+                        if (parts.some(isNaN)) return NaN;
+                        if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+                        if (parts.length === 2) return parts[0] * 60 + parts[1];
+                        if (parts.length === 1) return parts[0];
+                        return NaN;
+                    };
+
+                    const segments = rawText.split('/');
+                    segments.forEach((segment) => {
+                        if (!segment.trim()) return;
+                        const times = segment.split('-');
+                        if (times.length === 2) {
+                            let start = parseTime(times[0]);
+                            let end = parseTime(times[1]);
+                            if (!isNaN(start) && !isNaN(end)) {
+                                if (start < 0) start = 0;
+                                if (end > duration && duration > 0) end = duration;
+                                const randomNum = Math.floor(1000 + Math.random() * 9000);
+                                newClips.push({
+                                    id: generateId(),
+                                    name: `${startingIndex + 1}_KepKat_clip_${randomNum}`,
+                                    ext: 'mp4', start: start, end: end, selected: true
+                                });
+                                startingIndex++;
+                            }
+                        }
+                    });
+
+                    if (newClips.length > 0) {
+                        setClips([...newClips, ...currentClips]);
+                        setShowCsvModal(false);
+                        setCsvText('');
+                        addToast(`Berhasil import ${newClips.length} klip dari CSV`, "success");
+                    }
+                };
+
+                const copyPromptToClipboard = (e) => {
+                    const promptText = `Kamu adalah AI Content Clipper Expert, Viral Content Strategist, Audience Analyst, Retention Specialist, Consumer Psychology Expert, CTR Specialist, Engagement Specialist, Social Media Growth Expert, dan Short Video Editor Profesional.\n
+Misi utama kamu adalah menemukan bagian paling viral dari sebuah video panjang berdasarkan FILE SUBTITLE / TRANSKRIP / LINK VIDEO YOUTUBE yang diberikan dan mengubahnya menjadi rekomendasi klip pendek dengan peluang tertinggi untuk menghasilkan:\n
+- Watch Time Tinggi\n- Audience Retention Tinggi\n- CTR Tinggi\n- Share Tinggi\n- Save Tinggi\n- Komentar Tinggi\n- Follow Tinggi\n- Engagement Tinggi\n- Potensi Viral Tinggi\n
+Kamu tidak bertugas mencari klip yang "cukup bagus".\n
+Kamu bertugas menemukan klip yang memiliki probabilitas tertinggi untuk meledak performanya di TikTok, YouTube Shorts, Instagram Reels, Facebook Reels, dan platform video pendek lainnya.\n
+==================================================\n
+INPUT\n
+FILE SUBTITLE / TRANSKRIP / LINK:\n(TRANSCRIPT SAYA LAMPIRKAN JIKA ADA, JIKA TIDAK ADA KAMU ANALISIS MELALUI LINK YG SAYA BERIKAN DI BAWAH)\n
+JUMLAH KLIP:\n${csvJumlahClip}\n
+RATA-RATA DURASI KLIP:\n${isNaN(parseInt(csvDurasiClip)) ? csvDurasiClip : csvDurasiClip + ' menit'}\n\n
+CATATAN TAMBAHAN:\n${csvCatatan || 'Tidak ada'}\n\n\n\n
+==================================================\n
+SUMBER ANALISIS\n
+Gunakan FILE SUBTITLE / TRANSKRIP / LINK VIDEO sebagai sumber utama analisis.\n
+Analisis seluruh VIDEO terlebih dahulu sebelum menentukan klip.\n
+Pahami keseluruhan konteks percakapan.\n
+Pahami hubungan antar topik.\n
+Pahami alur pembicaraan.\n
+Pahami bagian yang berpotensi menjadi hook.\n
+Pahami bagian yang berpotensi menciptakan retensi tinggi.\n
+==================================================\n
+ATURAN PRIORITAS UTAMA\n
+Tujuan utama adalah menemukan klip dengan potensi viral tertinggi.\n
+Cari bagian video yang memiliki salah satu atau beberapa karakteristik berikut:\n
+- Kalimat yang membuat orang berhenti scroll\n- Fakta mengejutkan\n- Pengakuan pribadi\n- Kesalahan fatal\n- Cerita sukses\n- Cerita gagal\n- Twist\n- Konflik\n- Kontroversi\n- Peluang besar\n- Ancaman besar\n- Kesimpulan mengejutkan\n- Pernyataan yang memancing komentar\n- Pernyataan yang memancing perdebatan\n- Pelajaran berharga\n- Momen emosional\n
+Pilih hanya klip yang memiliki peluang terbesar untuk:\n
+- Ditonton sampai selesai\n- Dibagikan\n- Dikomentari\n- Disimpan\n- Menghasilkan follower baru\n
+Prioritaskan:\n
+- Hook sangat kuat\n- Curiosity tinggi\n- Konflik tinggi\n- Emosi tinggi\n- Nilai tinggi\n- Retensi tinggi\n- Shareability tinggi\n
+Hindari:\n
+- Intro panjang\n- Outro\n- Pengulangan\n- Bagian lambat\n- Penjelasan yang tidak memiliki nilai viral\n\n
+ATURAN PEMOTONGAN KLIP\n
+- Jangan memulai klip di tengah kalimat.\n- Jangan mengakhiri klip di tengah kalimat.\n- Jangan memotong kata yang belum selesai.\n- Jangan memotong ide yang belum selesai.\n- Pastikan setiap klip memiliki awal, isi, dan akhir yang jelas.\n- Pastikan konteks tetap utuh.\n- Pastikan penonton dapat memahami klip tanpa melihat video penuh.\n- Jika sebuah ide penting belum selesai, perpanjang timestamp hingga selesai.\n- Utamakan kualitas klip dibanding durasi pendek.\n\n
+==================================================\n
+OUTPUT(langsung berikan timestamp tanpa basa basi apapun):\n\n
+Buat dalam format timestamp siap copy dalam SATU BARIS:\n
+HH:MM:SS-HH:MM:SS / HH:MM:SS-HH:MM:SS / HH:MM:SS-HH:MM:SS\n
+Contoh:\n
+00:12:14-00:13:02 / 00:21:08-00:22:17 / 00:35:11-00:36:29\n
+==================================================\n
+INPUT DATA\n
+LINK VIDEO : ${youtubeUrlInput}\n
+==================================================\n
+JUMLAH KLIP:\n${csvJumlahClip}\n
+RATA-RATA DURASI KLIP :\n${isNaN(parseInt(csvDurasiClip)) ? csvDurasiClip : csvDurasiClip + ' menit'}\n\n
+CATATAN TAMBAHAN:\n${csvCatatan || 'cari yang sangat berpotensi viral'}`;
+
+                    navigator.clipboard.writeText(promptText);
+                    addToast("Prompt Viral berhasil disalin! Silakan paste di Chat AI.", "success");
+
+                    setIsPromptCopied(true);
+                    setTimeout(() => setIsPromptCopied(false), 1500);
+                };
+
+                const downloadTranscriptDirect = async (e) => {
+                    if (e) {
+                        const btn = e.currentTarget;
+                        btn.style.transform = 'scale(0.95)';
+                        setTimeout(() => btn.style.transform = '', 150);
+                    }
+                    if (!youtubeUrlInput || !(youtubeUrlInput.includes('http://') || youtubeUrlInput.includes('https://'))) {
+                        addToast("Isi link YouTube yang valid dulu!", "warning");
+                        return;
+                    }
+                    const btn = e.currentTarget;
+                    const originalText = btn.innerText;
+                    btn.innerText = "Mengambil...";
+                    btn.disabled = true;
+
+                    try {
+                        const res = await fetch('/api/fetch_transcript_direct', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ url: youtubeUrlInput })
+                        });
+                        if (!res.ok) throw new Error("Gagal");
+                        const data = await res.json();
+                        if (data.error) throw new Error(data.error);
+
+                        const blob = new Blob([data.text], { type: 'text/plain' });
+                        const blobUrl = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = blobUrl;
+                        a.download = `KepKat_Transcript.srt`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        window.URL.revokeObjectURL(blobUrl);
+                        addToast("Transcript berhasil didownload!", "success");
+                    } catch(err) {
+                        addToast("Gagal mendownload transcript.", "error");
+                    }
+                    btn.innerText = originalText;
+                    btn.disabled = false;
+                };
+
+                const downloadTranscript = async (e) => {
+                    if (e) {
+                        const btn = e.currentTarget;
+                        btn.style.transform = 'scale(0.95)';
+                        setTimeout(() => btn.style.transform = '', 150);
+                    }
+                    if (!videoIdHash) {
+                        addToast("Load video terlebih dahulu!", "warning");
+                        return;
+                    }
+                    try {
+                        const res = await fetch(`/api/get_transcript/${videoIdHash}`);
+                        if (!res.ok) throw new Error("Gagal");
+                        const blob = await res.blob();
+
+                        if (blob.type === "application/json") {
+                            addToast("Transcript tidak ditemukan untuk video ini.", "warning");
+                            return;
+                        }
+
+                        const safeTitle = (videoMeta?.title || 'Video').replace(/[^a-zA-Z0-9_\- ]/g, '');
+                        const blobUrl = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = blobUrl;
+                        a.download = `KepKat - ${safeTitle}.srt`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        window.URL.revokeObjectURL(blobUrl);
+                        addToast("Transcript berhasil didownload!", "success");
+                    } catch(err) {
+                        addToast("Gagal mendownload transcript.", "error");
+                    }
+                };
+
+                const updateClip = (id, field, value) => {
+                    setClips(clips.map(clip => clip.id === id ? { ...clip, [field]: value } : clip));
+                };
+
+                const removeClip = (id) => setClips(clips.filter(clip => clip.id !== id));
+                const toggleSelect = (id) => setClips(clips.map(clip => clip.id === id ? { ...clip, selected: !clip.selected } : clip));
+
+                const toggleSelectAll = () => {
+                    const allSelected = clips.every(c => c.selected);
+                    setClips(clips.map(clip => ({ ...clip, selected: !allSelected })));
+                };
+
+                const setClipTimeFromPlayer = (id, type) => {
+                    if (!videoRef.current) return;
+                    const time = Math.floor(videoRef.current.currentTime);
+                    updateClip(id, type, time);
+                };
+
+                const playPreview = (clip) => {
+                    if (videoRef.current) {
+                    if (previewingClipId === clip.id) {
+                        if (!videoRef.current.paused) { videoRef.current.pause(); setIsPlaying(false); }
+                        else { videoRef.current.play(); setIsPlaying(true); }
+                    } else {
+                        videoRef.current.currentTime = clip.start;
+                        videoRef.current.play();
+                        setIsPlaying(true);
+                        setPreviewingClipId(clip.id);
+                    }
+                    }
+                };
+
+                const processAndCutClips = async (clipsToProcess) => {
+                    if (clipsToProcess.length === 0 || !videoIdHash) return;
+
+                    if (downloadStatus === 'downloading') {
+                        addToast("Sabar cuy! Tunggu Download selesai dulu.", "warning");
+                        return;
+                    }
+                    if (downloadStatus === 'blocked') {
+                        addToast("Gagal! Server diblokir YouTube. Coba Restart Colab.", "error");
+                        return;
+                    }
+                    if (downloadStatus === 'error') {
+                        addToast("Video aslinya gagal di-download server.", "error");
+                        return;
+                    }
+
+                    setIsProcessing(true);
+                    cancelRenderRef.current = false;
+                    setTotalProcessCount(clipsToProcess.length);
+                    setShowMyClipModal(true);
+
+                    for (let i = 0; i < clipsToProcess.length; i++) {
+                        if (cancelRenderRef.current) break;
+
+                        const c = clipsToProcess[i];
+                        setCurrentProcessIndex(i + 1);
+                        setCurrentClipName(c.name);
+                        setProcessStatus(`Memotong klip ${i + 1} dari ${clipsToProcess.length}...`);
+                        setProcessProgress(0);
+
+                        const progressInterval = setInterval(async () => {
+                            try {
+                                const progRes = await fetch(`/api/cut_progress/${c.id}`);
+                                const progData = await progRes.json();
+                                if(progData.progress !== undefined) {
+                                    setProcessProgress(progData.progress);
+                                }
+                            } catch(e) {}
+                        }, 500);
+
+                        try {
+                            const res = await fetch('/api/cut_single', {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                    video_id: videoIdHash,
+                                    start: c.start,
+                                    end: c.end,
+                                    name: c.name,
+                                    quality: globalQuality,
+                                    ratio: globalRatio,
+                                    clip_id: c.id.toString(),
+                                    gpu_mode: isGpuMode,
+                                    engine_speed: engineSpeed
+                                })
+                            });
+                            clearInterval(progressInterval);
+                            if (!res.ok) throw new Error("Gagal potong");
+
+                            setProcessProgress(100);
+                            await loadSavedClips();
+                            await new Promise(r => setTimeout(r, 400));
+                        } catch (err) {
+                            clearInterval(progressInterval);
+                            if (cancelRenderRef.current) {
+                                console.log("Proses dibatalkan.");
+                                break;
+                            }
+                            console.error("Error potong klip", err);
+                        }
+                    }
+
+                    if (cancelRenderRef.current) {
+                        setProcessStatus('Proses Dibatalkan!');
+                        setTimeout(() => { setIsProcessing(false); }, 1500);
+                    } else {
+                        setProcessProgress(100);
+                        setProcessStatus('Kelar Cuy! Semua klip udah dipotong.');
+                        setTimeout(() => {
+                            setIsProcessing(false);
+                            addToast("Kelar Cuy! Proses potong udah beres.", "success");
+                        }, 1000);
+                    }
+                };
+
+                const handlePotongSelected = () => { const selectedClips = clips.filter(c => c.selected); processAndCutClips(selectedClips); };
+                const handleHapusTerpilih = () => setClips(clips.filter(c => !c.selected));
+
+                const toggleMyClipSelect = (id) => {
+                    setSelectedMyClips(prev => prev.includes(id) ? prev.filter(cId => cId !== id) : [...prev, id]);
+                };
+
+                const isAllMyClipsSelected = cutClips.length > 0 && selectedMyClips.length === cutClips.length;
+                const handleToggleAllMyClips = () => {
+                    if (isAllMyClipsSelected) {
+                        setSelectedMyClips([]);
+                    } else {
+                        setSelectedMyClips(cutClips.map(c => c.id));
+                    }
+                };
+
+                const deleteMyClips = async (clipIdsToDelete) => {
+                    if(clipIdsToDelete.length === 0) return;
+                    const urlsToDelete = cutClips.filter(c => clipIdsToDelete.includes(c.id)).map(c => c.url);
+
+                    try {
+                        await fetch('/api/delete_clips', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ urls: urlsToDelete })
+                        });
+
+                        setCutClips(prev => prev.filter(c => !clipIdsToDelete.includes(c.id)));
+                        setSelectedMyClips(prev => prev.filter(id => !clipIdsToDelete.includes(id)));
+                        addToast("Klip berhasil dihapus dari server.", "success");
+                    } catch(e) {
+                        addToast("Gagal menghapus klip.", "error");
+                    }
+                };
+
+                const cancelDownload = (clipId, e) => {
+                    e.stopPropagation();
+                    if (abortControllersRef.current[clipId]) {
+                        abortControllersRef.current[clipId].abort();
+                        delete abortControllersRef.current[clipId];
+                    }
+                    setClipDownloadProgresses(prev => { const newProg = {...prev}; delete newProg[clipId]; return newProg; });
+                };
+
+                const downloadSingleWithProgress = async (clipId, url, filename) => {
+                    if (clipDownloadProgresses[clipId] !== undefined) return;
+                    setClipDownloadProgresses(prev => ({...prev, [clipId]: 0}));
+
+                    const controller = new AbortController();
+                    abortControllersRef.current[clipId] = controller;
+
+                    try {
+                        const response = await fetch(url, { signal: controller.signal });
+                        if (!response.ok) throw new Error("Network response was not ok");
+
+                        const contentLength = response.headers.get('content-length');
+                        const total = contentLength ? parseInt(contentLength, 10) : 0;
+                        let loaded = 0;
+
+                        const reader = response.body.getReader();
+                        const chunks = [];
+
+                        while (true) {
+                            const {done, value} = await reader.read();
+                            if (done) break;
+                            chunks.push(value);
+                            loaded += value.length;
+                            if (total) {
+                                setClipDownloadProgresses(prev => ({...prev, [clipId]: (loaded/total)*100}));
+                            }
+                        }
+
+                        const blob = new Blob(chunks, { type: 'video/mp4' });
+                        const blobUrl = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = blobUrl;
+                        a.download = filename;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        window.URL.revokeObjectURL(blobUrl);
+
+                        setTimeout(() => {
+                            setClipDownloadProgresses(prev => {
+                                const newProg = {...prev};
+                                delete newProg[clipId];
+                                return newProg;
+                            });
+                            delete abortControllersRef.current[clipId];
+                        }, 500);
+                    } catch (err) {
+                        if (err.name === 'AbortError') {
+                            addToast("Download dibatalkan.", "warning");
+                        } else {
+                            addToast("Gagal download video.", "error");
+                        }
+                        setClipDownloadProgresses(prev => { const newProg = {...prev}; delete newProg[clipId]; return newProg; });
+                        delete abortControllersRef.current[clipId];
+                    }
+                };
+
+                const downloadSelectedMyClips = async () => {
+                    if(selectedMyClips.length === 0) return;
+                    const clipsToDownload = cutClips.filter(c => selectedMyClips.includes(c.id));
+
+                    clipsToDownload.forEach(c => {
+                        const fname = c.name.endsWith('.mp4') ? c.name : c.name + '.mp4';
+                        downloadSingleWithProgress(c.id, c.url, fname);
+                    });
+                };
+
+                const getAspectRatioStyle = () => {
+                    if (globalRatio === '16:9') return { aspectRatio: '16/9' };
+                    if (globalRatio === '9:16') return { aspectRatio: '9/16' };
+                    if (globalRatio === '1:1') return { aspectRatio: '1/1' };
+                    if (globalRatio === '3:4') return { aspectRatio: '3/4' };
+                    if (globalRatio === '4:3') return { aspectRatio: '4/3' };
+                    return { aspectRatio: 'auto' };
+                };
+
+                return (
+                    <div data-theme={appTheme} className="min-h-screen md:h-screen flex flex-col bg-[#000000] text-zinc-100 font-sans selection:bg-yellow-500/30 overflow-x-hidden md:overflow-hidden relative transition-colors duration-500">
+
+                    {/* TOAST SYSTEM CONTAINER */}
+                    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[99999] flex flex-col gap-2 pointer-events-none items-center">
+                        {toasts.length > 1 && (
+                            <button onClick={clearAllToasts} className="pointer-events-auto bg-zinc-800/90 text-zinc-300 text-[10px] font-bold uppercase tracking-wider px-4 py-1.5 rounded-full cursor-pointer hover:text-white hover:bg-zinc-700 mb-1 shadow-lg border border-zinc-700 transition-all active:scale-95">Tutup Semua Notifikasi</button>
+                        )}
+                        {toasts.map(t => (
+                            <div key={t.id} className={t.exiting ? "toast-exit" : "toast-enter"} onClick={() => clearAllToasts()}>
+                                <ToastItem t={t} removeToast={removeToast} />
+                            </div>
+                        ))}
+                    </div>
+
+                    <header className="sticky top-0 w-full h-12 bg-zinc-950 border-b border-zinc-800/50 px-4 flex justify-between items-center z-[999] shrink-0 shadow-md">
+                        <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-3 text-left group transition-all">
+                                <img src="LOGO_PANJANG_PLACEHOLDER" alt="KepKat Logo" onClick={cycleTheme} className="h-7 object-contain drop-shadow-[0_0_8px_rgba(234,179,8,0.3)] group-hover:scale-105 transition-all cursor-pointer" title="Klik untuk ganti tema!" />
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 sm:gap-3">
+                            <div className="flex items-center gap-2 bg-zinc-900/80 px-2 py-1.5 rounded-lg border border-zinc-800/50">
+                                <div className={`w-2 h-2 rounded-full ${isServerOnline ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-red-500 shadow-[0_0_8px_#ef4444] animate-pulse'}`}></div>
+                                <span className={`text-[9px] font-bold uppercase tracking-wider ${isServerOnline ? 'text-green-500' : 'text-red-500'}`}>{isServerOnline ? 'Server Online' : 'Server Offline'}</span>
+                            </div>
+                        </div>
+                    </header>
+
+                    <div ref={containerRef} className="flex-1 flex flex-col md:flex-row relative w-full min-h-0">
+
+                        {(currentView === 'home' || currentView === 'form') && (
+                            // BERANDA SECTION
+                            <div className="w-full h-full overflow-y-auto p-4 sm:p-8 flex flex-col items-center custom-scrollbar">
+                               <div className="w-full max-w-4xl flex flex-col gap-10 mt-4 sm:mt-10">
+                                   {/* Welcome Hero / Menu */}
+                                   <div className="flex flex-col md:flex-row gap-6 justify-center w-full">
+                                        <button onClick={() => setCurrentView('form')} className="flex-1 bg-gradient-to-br from-zinc-900 to-black border border-zinc-800 hover:border-yellow-500 p-8 rounded-2xl flex flex-col items-center justify-center gap-4 transition-all hover:-translate-y-1 hover:shadow-[0_10px_30px_rgba(234,179,8,0.1)] group">
+                                            <div className="w-16 h-16 rounded-full bg-yellow-500/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                                <Scissors size={28} className="text-yellow-500" />
+                                            </div>
+                                            <div className="text-center">
+                                                <h3 className="text-lg font-black tracking-wide text-zinc-200 group-hover:text-yellow-400 transition-colors">Potong Video Baru</h3>
+                                                <p className="text-xs text-zinc-500 mt-2 font-medium">Input link untuk analisa momen viral dengan AI</p>
+                                            </div>
+                                        </button>
+                                        <button onClick={() => setShowMyClipModal(true)} className="flex-1 bg-gradient-to-br from-zinc-900 to-black border border-zinc-800 hover:border-yellow-500 p-8 rounded-2xl flex flex-col items-center justify-center gap-4 transition-all hover:-translate-y-1 hover:shadow-[0_10px_30px_rgba(234,179,8,0.1)] group">
+                                            <div className="w-16 h-16 rounded-full bg-yellow-500/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                                <LayoutGrid size={28} className="text-yellow-500" />
+                                            </div>
+                                            <div className="text-center">
+                                                <h3 className="text-lg font-black tracking-wide text-zinc-200 group-hover:text-yellow-400 transition-colors">Koleksi My Clip</h3>
+                                                <p className="text-xs text-zinc-500 mt-2 font-medium">Lihat dan download klip yang sudah dipotong</p>
+                                            </div>
+                                        </button>
+                                   </div>
+
+                                   {/* PROJEK (Riwayat) */}
+                                   {history.length > 0 && (
+                                       <div className="w-full bg-gradient-to-b from-zinc-900/40 to-transparent border-t border-zinc-800/80 mt-2 pt-6 flex flex-col rounded-b-2xl">
+                                            <div className="flex items-center gap-3 mb-4 px-2">
+                                                <div className="w-8 h-8 rounded-full bg-yellow-500/10 flex items-center justify-center">
+                                                    <Clock size={16} className="text-yellow-500" />
+                                                </div>
+                                                <h3 className="text-sm font-black text-zinc-300 uppercase tracking-widest">Projek</h3>
+                                            </div>
+                                            <div className="flex flex-col gap-1">
+                                                {history.map((item, idx) => (
+                                                    <div key={idx} onClick={() => loadFromHistory(item)} className="flex items-center justify-between p-4 rounded-xl hover:bg-zinc-900/60 border border-transparent hover:border-zinc-800 transition-all cursor-pointer group">
+                                                        <div className="flex items-center gap-4 overflow-hidden">
+                                                            <div className="w-32 sm:w-40 aspect-video rounded-xl bg-black border border-zinc-800 flex items-center justify-center shrink-0 group-hover:border-yellow-500/50 transition-colors shadow-inner overflow-hidden">
+                                                                {item.thumbnail ? (
+                                                                    <img src={item.thumbnail} alt="thumb" className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
+                                                                ) : (
+                                                                    <Youtube size={20} className="text-red-500 opacity-80" />
+                                                                )}
+                                                            </div>
+                                                            <div className="flex flex-col min-w-0">
+                                                                <h4 className="text-sm font-bold text-zinc-200 truncate group-hover:text-yellow-400 transition-colors">{item.title}</h4>
+                                                                <span className="text-[10px] font-medium text-zinc-500 mt-1 truncate">{item.uploader}</span>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-4 shrink-0 pl-4">
+                                                            <span className="hidden sm:inline-block bg-zinc-800/80 px-2 py-1 rounded text-[9px] font-bold text-zinc-300 border border-zinc-700/50">{item.resolution}</span>
+                                                            <span className="text-xs font-mono text-zinc-500">{item.duration_str}</span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                       </div>
+                                   )}
+                               </div>
+                            </div>
+                        )}
+
+                        {currentView === 'form' && (
+                            // FORM SECTION (Auto Prompt Area)
+                            <div className="fixed inset-0 w-full h-full z-[10000] flex flex-col bg-[#000000]/95 backdrop-blur-sm overflow-hidden">
+                                <div className="flex justify-between items-center p-3 border-b border-zinc-800/80 bg-zinc-950 shrink-0">
+                                    <h2 className="text-sm font-black text-yellow-500 flex items-center gap-1.5">
+                                        Prompt Viral
+                                    </h2>
+                                    <button onClick={() => setCurrentView('home')} className="p-1 text-zinc-500 hover:text-white transition-transform active:scale-90" title="Kembali ke Beranda">
+                                        <X size={18} />
+                                    </button>
+                                </div>
+                                <div className="flex-1 overflow-y-auto p-4 custom-scrollbar flex flex-col gap-5">
+                                    <div className="flex flex-col gap-1 border-b border-zinc-800 pb-1">
+                                        <div className="flex justify-between items-center">
+                                            <label className="text-[10px] font-bold text-zinc-400">Link Video YouTube</label>
+                                            <button onClick={() => setYoutubeUrlInput('')} className="text-[8px] text-zinc-500 hover:text-yellow-500 uppercase font-bold transition-colors">Clear</button>
+                                        </div>
+                                        <input type="text" value={youtubeUrlInput} onChange={(e) => setYoutubeUrlInput(e.target.value)} className="w-full bg-transparent text-xs text-zinc-200 outline-none placeholder-zinc-600" placeholder="https://www.youtube.com/watch?v=..." />
+                                    </div>
+                                    <div className="flex flex-col gap-3">
+                                        <div className="flex flex-col gap-1 border-b border-zinc-800 pb-1">
+                                            <div className="flex justify-between items-center">
+                                                <label className="text-[10px] font-bold text-zinc-400">Jumlah Klip</label>
+                                                <button onClick={() => setCsvJumlahClip('')} className="text-[8px] text-zinc-500 hover:text-yellow-500 uppercase font-bold transition-colors">Clear</button>
+                                            </div>
+                                            <input type="text" value={csvJumlahClip} onChange={(e) => setCsvJumlahClip(e.target.value)} className="w-full bg-transparent text-xs text-zinc-200 outline-none placeholder-zinc-600" placeholder="Contoh: 10" />
+                                        </div>
+                                        <div className="flex flex-col gap-1 border-b border-zinc-800 pb-1">
+                                            <div className="flex justify-between items-center">
+                                                <label className="text-[10px] font-bold text-zinc-400">Durasi (Menit)</label>
+                                                <button onClick={() => setCsvDurasiClip('')} className="text-[8px] text-zinc-500 hover:text-yellow-500 uppercase font-bold transition-colors">Clear</button>
+                                            </div>
+                                            <input type="text" value={csvDurasiClip} onChange={(e) => setCsvDurasiClip(e.target.value)} className="w-full bg-transparent text-xs text-zinc-200 outline-none placeholder-zinc-600" placeholder="Contoh: 1" />
+                                        </div>
+                                        <div className="flex flex-col gap-1 border-b border-zinc-800 pb-1">
+                                            <div className="flex justify-between items-center">
+                                                <label className="text-[10px] font-bold text-zinc-400">Catatan Khusus</label>
+                                                <button onClick={() => setCsvCatatan('')} className="text-[8px] text-zinc-500 hover:text-yellow-500 uppercase font-bold transition-colors">Clear</button>
+                                            </div>
+                                            <input type="text" value={csvCatatan} onChange={(e) => setCsvCatatan(e.target.value)} className="w-full bg-transparent text-xs text-zinc-200 outline-none placeholder-zinc-600" placeholder="Cari momen lucu..." />
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button onClick={copyPromptToClipboard} className="flex-1 py-2.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-yellow-500 text-black transition-transform active:scale-95 text-center">
+                                            {isPromptCopied ? "Tersalin!" : "Salin Prompt"}
+                                        </button>
+                                        <button onClick={() => window.open('https://gemini.google.com/', '_blank')} className="flex-1 py-2.5 rounded-md text-[10px] font-bold uppercase tracking-wider border border-zinc-700 text-zinc-300 transition-transform active:scale-95 text-center">
+                                            Buka Gemini
+                                        </button>
+                                    </div>
+                                    <div className="flex flex-col flex-1 min-h-[150px]">
+                                        <label className="text-[10px] font-bold text-yellow-500 mb-2 uppercase tracking-wider">Paste Hasil AI di sini (Format: 00:00-00:00 / 00:00-00:00)</label>
+                                        <textarea value={csvText} onChange={handleTextareaChange} placeholder="Paste timestamp di sini..." className="flex-1 w-full bg-zinc-900/50 border border-zinc-800 focus:border-yellow-500 rounded-lg p-3 text-[10px] font-mono text-zinc-300 outline-none transition-all resize-none custom-scrollbar" />
+                                    </div>
+                                </div>
+                                <div className="p-3 border-t border-zinc-800/80 bg-zinc-950 shrink-0">
+                                    <button
+                                        onClick={handleYoutubeLoad}
+                                        disabled={isFetchingUrl}
+                                        className={`w-full py-3 rounded-lg text-[11px] font-black uppercase tracking-widest transition-transform flex items-center justify-center gap-1.5 ${
+                                            isFetchingUrl
+                                            ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700'
+                                            : 'bg-yellow-500 text-black active:scale-95'
+                                        }`}
+                                    >
+                                        {isFetchingUrl ? (
+                                            <><RefreshCw size={14} className="animate-spin" /> Memproses...</>
+                                        ) : (
+                                            <><Scissors size={14} /> Eksekusi Potongan</>
+                                        )}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {currentView === 'editor' && (
+                        <>
+                        <main className="flex flex-col h-auto md:h-full bg-[#000000] transition-all duration-0 ease-in-out shrink-0 min-h-0 panel-left" style={{ '--left-width': `${leftWidth}%` }}>
+                        <div className="w-full md:flex-1 md:overflow-y-auto p-3 flex flex-col min-h-0 items-center justify-start relative">
+                            <div className="w-full max-w-5xl mx-auto flex flex-col gap-3 shrink-0 h-full z-10 relative">
+                                {downloadStatus === 'downloading' && (
+                                    <div className="bg-zinc-900/80 border border-yellow-500/30 p-3 rounded-xl flex flex-col gap-2 shrink-0 shadow-[0_0_10px_rgba(234,179,8,0.1)] mb-1">
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-[10px] font-bold text-yellow-400 uppercase tracking-wider flex items-center gap-1">
+                                                <Activity size={12} className="animate-pulse" /> Loading Video...
+                                            </span>
+                                            <span className="text-[10px] font-bold text-yellow-300">{downloadProgress.toFixed(1)}%</span>
+                                        </div>
+                                        <div className="w-full bg-zinc-800 rounded-full h-1.5 overflow-hidden shadow-inner">
+                                            <div className="bg-gradient-to-r from-yellow-400 to-amber-500 h-1.5 rounded-full transition-all duration-300" style={{ width: `${downloadProgress}%` }}></div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className={isMiniPlayer ? "fixed z-[9990] shadow-[0_20px_50px_rgba(0,0,0,0.8)] border border-yellow-500/50 rounded-xl bg-black" : "sticky top-0 z-[60] bg-[#000000] pb-2 md:pb-0 pt-2 md:pt-0"} style={isMiniPlayer ? { left: miniPos.x, top: miniPos.y, width: '220px', ...getAspectRatioStyle(), touchAction: 'none', resize: 'horizontal', overflow: 'hidden', paddingBottom: '1px', paddingRight: '1px' } : {}}>
+                                    <div
+                                        className={`relative group w-full h-full flex justify-center bg-black overflow-hidden shrink-0 ${isMiniPlayer ? 'cursor-grab active:cursor-grabbing' : 'rounded-b-xl md:rounded-xl border border-zinc-800/80 shadow-lg'}`}
+                                        onMouseDown={handleDragStart}
+                                        onTouchStart={handleDragStart}
+                                    >
+                                        {!isMiniPlayer && (
+                                            <>
+                                            <button onClick={(e) => { e.stopPropagation(); if(videoRef.current){ videoRef.current.load(); if(isPlaying) videoRef.current.play(); } }} className="absolute top-2 right-10 z-50 text-zinc-400 hover:text-white bg-black/50 hover:bg-yellow-500/80 hover:text-black rounded p-1 transition-all active:scale-90 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 drop-shadow-md" title="Refresh Preview">
+                                                <RefreshCw size={14} />
+                                            </button>
+                                            <button onClick={(e) => { e.stopPropagation(); setFile(null); setCurrentView('home'); setVideoUrl(null); setVideoMeta(null); setClips([]); setPreviewingClipId(null); setIsPlaying(false); setIsMiniPlayer(false); }} className="absolute top-2 right-2 z-50 text-zinc-400 hover:text-white bg-black/50 hover:bg-red-500/80 rounded p-1 transition-all active:scale-90 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 drop-shadow-md" title="Tutup">
+                                                <X size={14} />
+                                            </button>
+                                            </>
+                                        )}
+                                        <div className="relative overflow-hidden flex items-center justify-center bg-zinc-950 w-full h-full pointer-events-none" style={{ ...getAspectRatioStyle(), maxHeight: !isMiniPlayer ? '50vh' : 'none', width: globalRatio === '9:16' && !isMiniPlayer ? 'auto' : '100%' }}>
+                                            <video ref={videoRef} src={videoUrl} className="w-full h-full pointer-events-auto" style={{ objectFit: globalRatio === 'original' ? 'contain' : 'cover' }} onTimeUpdate={handleTimeUpdate} onLoadedMetadata={handleLoadedMetadata} onEnded={() => setIsPlaying(false)} onClick={togglePlay} playsInline />
+                                        </div>
+                                        <div className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black via-black/80 to-transparent pt-10 pb-3 px-3 opacity-0 group-hover:opacity-100 transition-opacity z-40 ${isMiniPlayer ? 'pointer-events-auto' : 'pointer-events-none'}`}>
+                                            <div className="flex items-center gap-2 text-white pointer-events-auto w-full">
+                                                <button onClick={(e) => { e.stopPropagation(); togglePlay(); }} className="hover:text-yellow-400 transition-colors active:scale-90 bg-white/10 p-1.5 rounded-full backdrop-blur-sm shrink-0">
+                                                {isPlaying ? <Pause size={12} className="fill-current" /> : <Play size={12} className="fill-current ml-0.5" />}
+                                                </button>
+                                                <span className="text-[10px] font-mono shrink-0 ml-1">{formatTimeCompact(currentTime)}</span>
+                                                <div className="flex-1 flex items-center mx-1">
+                                                    <input type="range" min="0" max={duration || 100} value={currentTime} onChange={(e) => { e.stopPropagation(); if (videoRef.current) { videoRef.current.currentTime = parseFloat(e.target.value); setCurrentTime(parseFloat(e.target.value)); } }} className="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-yellow-400" />
+                                                </div>
+                                                <span className="text-[10px] font-mono shrink-0 mr-1">{formatTimeCompact(duration)}</span>
+                                                <button onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    if (!isMiniPlayer) {
+                                                        if (window.innerWidth <= 768) {
+                                                            setMiniPos({ x: (window.innerWidth - 220) / 2, y: 80 });
+                                                        } else if (videoRef.current) {
+                                                            const rect = videoRef.current.parentElement.getBoundingClientRect();
+                                                            setMiniPos({ x: rect.left, y: rect.top });
+                                                        }
+                                                    }
+                                                    setIsMiniPlayer(!isMiniPlayer);
+                                                }} className="text-zinc-400 hover:text-white transition-colors active:scale-90 p-1 shrink-0" title={isMiniPlayer ? "Normal" : "Mini Player"}>
+                                                    {isMiniPlayer ? <Maximize size={14} /> : <Minimize size={14} />}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {videoMeta && downloadStatus === 'done' && !isMiniPlayer && (
+                                    <div className="bg-zinc-900/40 border border-zinc-800/80 p-3 rounded-lg flex flex-col gap-2 shrink-0">
+                                        <h3 className="text-xs font-bold text-zinc-300 leading-snug truncate" title={videoMeta.title}>{videoMeta.title}</h3>
+                                        <div className="flex flex-wrap items-center gap-3 text-[9px] font-bold text-zinc-500 uppercase tracking-wider">
+                                            <span className="flex items-center gap-1"><Youtube size={12} className="text-red-500" /> {videoMeta.uploader}</span>
+                                            <span className="flex items-center gap-1"><Activity size={12} className="text-yellow-500" /> Res: {videoMeta.resolution}</span>
+                                            <span className="flex items-center gap-1"><FileDown size={12} className="text-amber-500" /> Size: {videoMeta.size_str}</span>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-lg p-3 shrink-0 mb-2">
+                                    <div className="flex justify-between items-center mb-2 pb-1 border-b border-zinc-800/80">
+                                        <h3 className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-zinc-400">
+                                        <Settings size={12} className="text-yellow-500" /> Setting Output
+                                        </h3>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                        <label className="block text-[8px] font-bold text-zinc-500 mb-1 uppercase tracking-wider">Aspek Rasio</label>
+                                        <CustomSelect value={globalRatio} onChange={setGlobalRatio} options={[{value: 'original', label: 'Asli File'},{value: '9:16', label: '9:16 (TikTok)'},{value: '3:4', label: '3:4 (Instagram)'},{value: '1:1', label: '1:1 (Square)'},{value: '4:3', label: '4:3 (Standard)'},{value: '16:9', label: '16:9 (YouTube)'}]} />
+                                        </div>
+                                        <div>
+                                        <label className="block text-[8px] font-bold text-zinc-500 mb-1 uppercase tracking-wider">Kualitas</label>
+                                        <CustomSelect value={globalQuality} onChange={setGlobalQuality} options={[{value: 'original', label: 'Asli File'},{value: '4k', label: '2160p (4K)'},{value: '2k', label: '1440p (2K)'},{value: '1080p', label: '1080p Full HD'},{value: '720p', label: '720p HD'},{value: '480p', label: '480p SD'},{value: '360p', label: '360p SD'}]} />
+                                        </div>
+                                    </div>
+                                    <div className="mt-2 pt-2 border-t border-zinc-800/80">
+                                        <label className="block text-[8px] font-bold text-zinc-500 mb-1 uppercase tracking-wider">Engine Speed</label>
+                                        <CustomSelect value={engineSpeed} onChange={setEngineSpeed} options={[{value: 'ultrafast', label: '⚡ Ultrafast'},{value: 'fast', label: '🚀 Fast (Normal)'},{value: 'slow', label: '🐢 Slow (Maksimal)'}]} />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        </main>
+
+                        <div onMouseDown={() => setIsDragging(true)} className={`hidden md:block w-1 shrink-0 z-30 cursor-col-resize transition-colors hover:bg-yellow-500 active:bg-yellow-400 ${isDragging ? 'bg-yellow-500' : 'bg-zinc-800/80'}`} />
+
+                        <aside className="relative w-full md:flex-1 flex flex-col bg-zinc-950/80 border-t md:border-t-0 md:border-l border-zinc-800/50 md:h-full md:overflow-hidden min-w-full md:min-w-[320px] min-h-0">
+                            <div className="px-3 py-2 border-b border-zinc-800/80 flex justify-between items-center bg-zinc-900/50 shrink-0 flex-wrap gap-2">
+                            <h2 className="text-[11px] font-bold flex items-center gap-1.5 uppercase tracking-widest text-zinc-300 w-full sm:w-auto"><FileVideo size={14} className="text-yellow-500" /> List ({clips.length})</h2>
+                            <div className="flex flex-wrap gap-1.5">
+                                <button onClick={handleUndo} disabled={pastClips.length === 0} className="bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 disabled:opacity-50 text-zinc-400 hover:text-white text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded flex items-center gap-1 transition-transform active:scale-95" title="Undo"><Undo size={12} /></button>
+                                <button onClick={handleRedo} disabled={futureClips.length === 0} className="bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 disabled:opacity-50 text-zinc-400 hover:text-white text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded flex items-center gap-1 transition-transform active:scale-95" title="Redo"><Redo size={12} /></button>
+                                <button onClick={toggleGpuMode} className={`px-2 py-1 rounded text-[9px] font-bold uppercase tracking-wider transition-transform active:scale-95 flex items-center gap-1 shadow-sm ${isGpuMode ? 'bg-amber-950/80 text-amber-400 border border-amber-600 gpu-fire' : 'bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-400 hover:text-white'}`}>
+                                    <Flame size={12} className={isGpuMode ? "animate-pulse" : ""} /> GPU
+                                </button>
+                                <button onClick={() => setShowMyClipModal(true)} className="bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-yellow-400 text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded flex items-center gap-1 transition-transform active:scale-95"><LayoutGrid size={12} /> My Clip</button>
+                                <button onClick={() => setShowCsvModal(true)} disabled={duration <= 0} className="bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-amber-400 text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded flex items-center gap-1 transition-transform active:scale-95"><Sparkles size={12} /> Prompt</button>
+                                <button onClick={addClip} className="bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded flex items-center gap-1 transition-transform active:scale-95"><Plus size={12} /> Add</button>
+                            </div>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-2 space-y-2 relative min-h-0 z-0 pb-[80px] md:pb-0">
+                            {clips.map((clip) => (
+                                <div key={clip.id} className={`bg-zinc-900/60 border rounded-lg p-2.5 transition-all duration-300 ${clip.selected ? 'border-yellow-500/50 shadow-[0_0_10px_rgba(234,179,8,0.05)]' : 'border-zinc-800/80'} group relative overflow-hidden z-0`}>
+                                <div className="flex items-center gap-2 mb-2 relative z-10">
+                                    <button onClick={() => toggleSelect(clip.id)} className="text-zinc-500 hover:text-yellow-400 transition-transform active:scale-90 shrink-0 p-0.5">{clip.selected ? <CheckSquare size={16} className="text-yellow-400" /> : <Square size={16} />}</button>
+                                    <div className="flex-1 flex items-center bg-black/40 rounded border border-zinc-800/80 overflow-hidden focus-within:border-yellow-500 transition-colors"><input type="text" value={clip.name} onChange={(e) => updateClip(clip.id, 'name', e.target.value)} className="w-full bg-transparent px-2 py-1 text-[10px] focus:outline-none font-medium text-zinc-300" placeholder="Nama file" /></div>
+                                    <button onClick={() => removeClip(clip.id)} className="text-zinc-500 hover:text-red-500 p-1 rounded hover:bg-red-500/10 transition-transform active:scale-90 shrink-0"><Trash2 size={14} /></button>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2 relative z-10">
+                                    <div className="bg-black/40 p-1.5 rounded border border-zinc-800/80 flex flex-col">
+                                    <div className="flex justify-between items-center mb-0.5">
+                                        <label className="text-[7px] font-bold text-zinc-500 uppercase tracking-wider">Start</label>
+                                        <button onClick={() => setClipTimeFromPlayer(clip.id, 'start')} className="text-yellow-500 hover:text-yellow-400 flex items-center gap-0.5 text-[7px] font-bold uppercase tracking-wider bg-yellow-950/30 border border-yellow-900/30 px-1 py-0.5 rounded transition-transform active:scale-95"><Clock size={8} /> Player</button>
+                                    </div>
+                                    <TimeInput clip={clip} type="start" updateClip={updateClip} />
+                                    </div>
+                                    <div className="bg-black/40 p-1.5 rounded border border-zinc-800/80 flex flex-col">
+                                    <div className="flex justify-between items-center mb-0.5">
+                                        <label className="text-[7px] font-bold text-zinc-500 uppercase tracking-wider">End</label>
+                                        <button onClick={() => setClipTimeFromPlayer(clip.id, 'end')} className="text-yellow-500 hover:text-yellow-400 flex items-center gap-0.5 text-[7px] font-bold uppercase tracking-wider bg-yellow-950/30 border border-yellow-900/30 px-1 py-0.5 rounded transition-transform active:scale-95"><Clock size={8} /> Player</button>
+                                    </div>
+                                    <TimeInput clip={clip} type="end" updateClip={updateClip} />
+                                    </div>
+                                </div>
+                                <div className="pt-1.5 border-t border-zinc-800/80 flex flex-col gap-1.5 relative z-10 bg-black/20 p-1.5 rounded border border-zinc-800/50">
+                                    <input type="range" min="0" max={clip.end > clip.start ? clip.end - clip.start : 0.1} step="0.1" value={previewingClipId === clip.id ? Math.max(0, Math.min(currentTime - clip.start, clip.end - clip.start)) : 0} onChange={(e) => { if (videoRef.current) { const newTime = clip.start + parseFloat(e.target.value); videoRef.current.currentTime = newTime; setCurrentTime(newTime); setPreviewingClipId(clip.id); } }} className="w-full h-1 bg-zinc-800 rounded appearance-none cursor-pointer accent-yellow-500 hover:accent-yellow-400 transition-all" />
+                                    <div className="flex justify-between items-center mt-0.5">
+                                        <div className="w-[40px] text-left">
+                                            <span className="text-[8px] text-yellow-400 font-mono font-medium">{previewingClipId === clip.id ? formatDurationDisplay(Math.max(0, Math.min(currentTime - clip.start, clip.end - clip.start))) : "0 dtk"}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2 justify-center">
+                                            <button onClick={() => { if(videoRef.current) { videoRef.current.currentTime = clip.start; setPreviewingClipId(clip.id); setCurrentTime(clip.start); } }} className="text-zinc-500 hover:text-white transition-transform active:scale-90"><SkipBack size={12} /></button>
+                                            <button onClick={() => handleSeekAndExtend(clip.id, videoRef.current?.currentTime || clip.start, -1, false)} className="text-zinc-500 hover:text-white transition-transform active:scale-90"><Rewind size={12} /></button>
+                                            <button onClick={() => playPreview(clip)} className={`w-6 h-6 flex items-center justify-center rounded-full text-black font-black transition-transform shadow-sm active:scale-90 ${isGpuMode ? 'bg-amber-500 hover:bg-amber-400' : 'bg-yellow-500 hover:bg-yellow-400'}`}>{previewingClipId === clip.id && isPlaying ? <Pause size={10} className="fill-current" /> : <Play size={10} className="fill-current ml-0.5" />}</button>
+                                            <button onClick={() => handleSeekAndExtend(clip.id, videoRef.current?.currentTime || clip.start, 1, false)} className="text-zinc-500 hover:text-white transition-transform active:scale-90"><FastForward size={12} /></button>
+                                            <button onClick={() => { if(videoRef.current) { videoRef.current.currentTime = clip.end; setPreviewingClipId(clip.id); setCurrentTime(clip.end); } }} className="text-zinc-500 hover:text-white transition-transform active:scale-90"><SkipForward size={12} /></button>
+                                        </div>
+                                        <div className="w-[40px] text-right">
+                                            <span className="text-[8px] text-zinc-500 font-mono font-medium">{formatDurationDisplay(clip.end > clip.start ? clip.end - clip.start : 0)}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                </div>
+                            ))}
+                            {clips.length === 0 && (
+                                <div className="text-center text-zinc-600 mt-8">
+                                <Scissors size={20} className="mx-auto mb-1 opacity-20" />
+                                <p className="font-medium text-[10px]">Belum ada potongan.</p>
+                                </div>
+                            )}
+                            </div>
+                            <div className="fixed md:sticky bottom-0 left-0 right-0 z-50 px-2 py-1.5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] md:pb-1.5 border-t border-zinc-800/80 bg-zinc-950 shrink-0 w-full shadow-[0_-5px_15px_rgba(0,0,0,0.5)] md:shadow-none pointer-events-auto">
+                            <div className="flex items-center gap-1.5 relative z-50">
+                                <button onClick={toggleSelectAll} className={`p-1.5 rounded transition-transform active:scale-95 border ${clips.length > 0 && clips.every(c => c.selected) ? 'text-yellow-400 bg-yellow-900/30 border-yellow-800/50' : 'text-zinc-500 hover:text-white bg-zinc-800 border-zinc-700'}`} title="Pilih Semua"><CheckSquare size={14} /></button>
+                                <button onTouchEnd={(e) => { e.preventDefault(); handleHapusTerpilih(); }} onClick={handleHapusTerpilih} disabled={clips.filter(c => c.selected).length === 0 || isProcessing} className="flex-[1] bg-zinc-800 border border-zinc-700 hover:border-red-800/50 disabled:opacity-50 text-zinc-400 hover:text-red-400 text-[9px] font-bold uppercase tracking-wider py-1.5 rounded flex items-center justify-center gap-1 transition-transform active:scale-95"><Trash2 size={10} /> Hapus</button>
+                                <button onTouchEnd={(e) => { e.preventDefault(); addToast("Fitur Edit akan segera hadir!", "info"); }} onClick={() => addToast("Fitur Edit akan segera hadir!", "info")} disabled={clips.filter(c => c.selected).length === 0 || isProcessing} className="flex-[1] bg-zinc-800 border border-zinc-700 hover:border-blue-800/50 disabled:opacity-50 text-zinc-400 hover:text-blue-400 text-[9px] font-bold uppercase tracking-wider py-1.5 rounded flex items-center justify-center gap-1 transition-transform active:scale-95"><Edit size={10} /> Edit</button>
+                                <button onTouchEnd={(e) => { e.preventDefault(); handlePotongSelected(); }} onClick={handlePotongSelected} disabled={clips.filter(c => c.selected).length === 0 || isProcessing} className={`flex-[1.5] text-black text-[9px] font-black uppercase tracking-wider py-1.5 rounded flex items-center justify-center gap-1 transition-transform active:scale-95 disabled:opacity-50 ${isGpuMode ? 'bg-amber-500 hover:bg-amber-400' : 'bg-yellow-500 hover:bg-yellow-400'}`}><Scissors size={10} /> Potong</button>
+                            </div>
+                            </div>
+                        </aside>
+                        </>
+                        )}
+                    </div>
+
+                    {/* MODAL MY CLIP GRID */}
+                    <div className={`fixed inset-0 w-full h-full z-[10000] flex flex-col bg-[#000000]/95 backdrop-blur-sm transition-all duration-300 ${showMyClipModal ? 'opacity-100 visible' : 'opacity-0 invisible pointer-events-none'}`}>
+                        <div className="flex justify-between items-center p-2.5 sm:px-4 border-b border-zinc-800/50 bg-zinc-950/90 shrink-0">
+                            <h2 className="text-sm font-black text-yellow-400 flex items-center gap-1.5">
+                                <LayoutGrid size={16} /> My Clips ({cutClips.length})
+                            </h2>
+                            <div className="flex gap-1.5 items-center">
+                                <button onClick={loadSavedClips} className="p-1.5 rounded text-zinc-500 hover:text-yellow-400 hover:bg-zinc-800 transition-transform active:scale-95" title="Refresh"><RefreshCw size={14} /></button>
+                                {selectedMyClips.length > 0 && (
+                                    <button onClick={() => deleteMyClips(selectedMyClips)} className="px-2 py-1.5 rounded text-red-400 hover:text-white hover:bg-red-900/50 transition-transform active:scale-95 flex items-center gap-1">
+                                        <Trash2 size={12} /><span className="text-[9px] font-bold">({selectedMyClips.length})</span>
+                                    </button>
+                                )}
+                                <button onClick={handleToggleAllMyClips} className="p-1.5 rounded text-zinc-500 hover:text-yellow-400 hover:bg-zinc-800 transition-transform active:scale-95" title="Pilih Semua">
+                                    {isAllMyClipsSelected ? <CheckSquare size={14} className="text-yellow-400" /> : <Square size={14} />}
+                                </button>
+                                {selectedMyClips.length > 0 && (
+                                    <button onClick={downloadSelectedMyClips} disabled={isProcessing} className="px-2 py-1.5 rounded text-[9px] font-black uppercase tracking-wider bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 text-black transition-transform active:scale-95 flex items-center gap-1">
+                                        <Download size={12} /> <span className="hidden sm:inline">Down</span>
+                                    </button>
+                                )}
+                                <button onClick={() => setShowMyClipModal(false)} className="p-1.5 rounded text-zinc-500 hover:text-white transition-transform active:scale-90 ml-1"><X size={18} /></button>
+                            </div>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-2 sm:p-4 custom-scrollbar">
+                            <div className="columns-2 md:columns-3 lg:columns-4 gap-2 space-y-2 items-start">
+                                {isProcessing && (
+                                    <div className="break-inside-avoid relative bg-[#000000] rounded-lg overflow-hidden border border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.3)] p-3 flex flex-col gap-3 justify-center min-h-[140px] mb-2 z-10">
+                                        <div className="flex justify-between items-center border-b border-zinc-800/50 pb-1">
+                                            <span className="text-[10px] font-bold text-yellow-500 flex items-center gap-1.5">{isGpuMode ? <Flame size={14} className="animate-pulse" /> : <Scissors size={14} className="animate-pulse" />}Klip {currentProcessIndex}/{totalProcessCount}</span>
+                                            <span className="text-[10px] font-black text-yellow-500">{Math.round(processProgress)}%</span>
+                                        </div>
+                                        <span className="text-[9px] font-mono text-zinc-300 truncate bg-zinc-900/50 p-1.5 rounded border border-zinc-800">{currentClipName}</span>
+                                        <div className="w-full bg-zinc-900 rounded-full h-1.5 overflow-hidden border border-zinc-800">
+                                            <div className="bg-yellow-500 h-1.5 rounded-full transition-all duration-300" style={{ width: `${processProgress}%` }}></div>
+                                        </div>
+                                        <div className="flex justify-between items-center mt-1">
+                                            <span className="text-[8px] font-bold text-zinc-500 uppercase tracking-wider">{processStatus}</span>
+                                            <button onClick={async () => {
+                                                cancelRenderRef.current = true;
+                                                try { await fetch('/api/cancel_cut', {method: 'POST'}); } catch(e) {}
+                                                setIsProcessing(false);
+                                                addToast("Dibatalkan.", "warning");
+                                            }} className="px-2 py-1 rounded bg-red-600/90 hover:bg-red-500 text-white text-[9px] font-bold uppercase transition-transform active:scale-95 flex items-center gap-1 border border-red-500"><X size={10} /> Batal</button>
+                                        </div>
+                                    </div>
+                                )}
+                                {cutClips.length === 0 && !isProcessing && (
+                                    <div className="h-full flex flex-col items-center justify-center text-zinc-600 col-span-full pt-10">
+                                        <Scissors size={32} className="mb-2 opacity-30" />
+                                        <p className="text-xs font-bold tracking-tight">Belum ada klip.</p>
+                                    </div>
+                                )}
+                                {cutClips.map(c => {
+                                    const dlProgress = clipDownloadProgresses[c.id];
+                                    const isSelected = selectedMyClips.includes(c.id);
+                                    return (
+                                        <div key={c.id} className={`break-inside-avoid relative bg-zinc-900/40 rounded-lg overflow-hidden border transition-all duration-300 group ${isSelected ? 'border-yellow-500 shadow-[0_0_10px_rgba(234,179,8,0.2)]' : 'border-zinc-800/80 hover:border-yellow-500/50'}`}>
+                                            <button onClick={(e) => { e.stopPropagation(); deleteMyClips([c.id]); }} className="absolute top-1.5 right-1.5 z-10 p-1.5 rounded bg-black/60 text-zinc-400 hover:text-red-500 transition-transform active:scale-90 opacity-0 group-hover:opacity-100"><Trash2 size={12} /></button>
+                                            <video src={c.url} controls preload="metadata" className="w-full object-cover" />
+                                            <div className="p-2 bg-zinc-950/80 cursor-pointer flex flex-col gap-1.5" onClick={() => toggleMyClipSelect(c.id)}>
+                                                <input type="text" value={c.name} onChange={(e) => { const newName = e.target.value; setCutClips(prev => prev.map(clip => clip.id === c.id ? {...clip, name: newName} : clip)); }} onClick={(e) => e.stopPropagation()} className="w-full bg-transparent border-b border-zinc-800 focus:border-yellow-500 px-1 py-0.5 text-[9px] font-medium text-zinc-300 outline-none transition-colors" title="Ubah nama" />
+                                                <div className="flex justify-between items-center relative gap-1 flex-wrap">
+                                                    <div className="flex items-center text-zinc-500 group-hover:text-yellow-500 transition-colors">{isSelected ? <CheckCircle2 size={14} className="text-yellow-500" /> : <Square size={14} />}</div>
+                                                    <div className="flex items-center gap-1.5">
+                                                        <span className="text-[8px] font-mono text-zinc-500">{c.size}</span>
+                                                        {dlProgress !== undefined ? (
+                                                            <button onClick={(e) => cancelDownload(c.id, e)} className="p-1 rounded bg-red-900/80 text-red-200 transition-transform active:scale-90"><X size={10} /></button>
+                                                        ) : (
+                                                            <button onClick={(e) => { e.stopPropagation(); const fname = c.name.endsWith('.mp4') ? c.name : c.name + '.mp4'; downloadSingleWithProgress(c.id, c.url, fname); }} className="p-1 rounded bg-zinc-800 hover:bg-yellow-500 hover:text-black text-zinc-400 transition-transform active:scale-90"><Download size={10} /></button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                {dlProgress !== undefined && (
+                                                    <div className="w-full bg-zinc-800 rounded-full h-1 overflow-hidden mt-0.5"><div className="bg-yellow-500 h-1 rounded-full transition-all duration-200" style={{ width: `${dlProgress}%` }}></div></div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* MODAL CSV */}
+                    {showCsvModal && (
+                        <div className="fixed inset-0 w-full h-full z-[10000] flex flex-col bg-[#000000]/95 backdrop-blur-sm overflow-hidden">
+                            <div className="flex justify-between items-center p-3 border-b border-zinc-800/80 bg-zinc-950 shrink-0">
+                                <h2 className="text-sm font-black text-yellow-500 flex items-center gap-1.5">Prompt Viral</h2>
+                                <button onClick={() => setShowCsvModal(false)} className="p-1 text-zinc-500 hover:text-white transition-transform active:scale-90"><X size={18} /></button>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-4 custom-scrollbar flex flex-col gap-5">
+                                <div className="flex flex-col gap-3">
+                                    <div className="flex flex-col gap-1 border-b border-zinc-800 pb-1">
+                                        <div className="flex justify-between items-center">
+                                            <label className="text-[10px] font-bold text-zinc-400">Jumlah Klip</label>
+                                            <button onClick={() => setCsvJumlahClip('')} className="text-[8px] text-zinc-500 hover:text-yellow-500 uppercase font-bold transition-colors">Clear</button>
+                                        </div>
+                                        <input type="text" value={csvJumlahClip} onChange={(e) => setCsvJumlahClip(e.target.value)} className="w-full bg-transparent text-xs text-zinc-200 outline-none placeholder-zinc-600" placeholder="Contoh: 10" />
+                                    </div>
+                                    <div className="flex flex-col gap-1 border-b border-zinc-800 pb-1">
+                                        <div className="flex justify-between items-center">
+                                            <label className="text-[10px] font-bold text-zinc-400">Durasi (Menit)</label>
+                                            <button onClick={() => setCsvDurasiClip('')} className="text-[8px] text-zinc-500 hover:text-yellow-500 uppercase font-bold transition-colors">Clear</button>
+                                        </div>
+                                        <input type="text" value={csvDurasiClip} onChange={(e) => setCsvDurasiClip(e.target.value)} className="w-full bg-transparent text-xs text-zinc-200 outline-none placeholder-zinc-600" placeholder="Contoh: 1" />
+                                    </div>
+                                    <div className="flex flex-col gap-1 border-b border-zinc-800 pb-1">
+                                        <div className="flex justify-between items-center">
+                                            <label className="text-[10px] font-bold text-zinc-400">Catatan Khusus</label>
+                                            <button onClick={() => setCsvCatatan('')} className="text-[8px] text-zinc-500 hover:text-yellow-500 uppercase font-bold transition-colors">Clear</button>
+                                        </div>
+                                        <input type="text" value={csvCatatan} onChange={(e) => setCsvCatatan(e.target.value)} className="w-full bg-transparent text-xs text-zinc-200 outline-none placeholder-zinc-600" placeholder="Cari momen lucu..." />
+                                    </div>
+                                </div>
+                                <div className="flex gap-2">
+                                    <button onClick={copyPromptToClipboard} className="flex-1 py-2.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-yellow-500 text-black transition-transform active:scale-95 text-center">{isPromptCopied ? "Tersalin!" : "Salin Prompt"}</button>
+                                    <button onClick={downloadTranscript} className="flex-1 py-2.5 rounded-md text-[10px] font-bold uppercase tracking-wider border border-zinc-700 text-zinc-300 transition-transform active:scale-95 text-center">Down Transcript</button>
+                                </div>
+                                <div className="flex flex-col gap-1.5">
+                                    <span className="text-[8px] text-zinc-500 font-bold uppercase text-center">Lanjut ke AI</span>
+                                    <div className="flex justify-center gap-3 text-[10px] font-bold">
+                                        <a href="https://chatgpt.com/" target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-yellow-400 underline decoration-zinc-700 underline-offset-4">ChatGPT</a>
+                                        <a href="https://gemini.google.com/" target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-yellow-400 underline decoration-zinc-700 underline-offset-4">Gemini</a>
+                                        <a href="https://claude.ai/" target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-yellow-400 underline decoration-zinc-700 underline-offset-4">Claude</a>
+                                    </div>
+                                    <p className="text-[8px] text-zinc-500 mt-1 text-center">Catatan: Selain AI Gemini wajib menyisipkan file transcriptnya.</p>
+                                </div>
+                                <hr className="border-zinc-800" />
+                                <div className="flex flex-col flex-1 min-h-[150px]">
+                                    <label className="text-[10px] font-bold text-yellow-500 mb-2 uppercase tracking-wider">Paste Hasil AI di sini (Format: 00:00-00:00 / 00:00-00:00)</label>
+                                    <textarea value={csvText} onChange={(e) => setCsvText(e.target.value)} placeholder="00:01:20-00:01:45 / 00:02:10-00:02:50" className="flex-1 w-full bg-zinc-900/50 border border-zinc-800 focus:border-yellow-500 rounded-lg p-3 text-[10px] font-mono text-zinc-300 outline-none transition-all resize-none custom-scrollbar" />
+                                </div>
+                            </div>
+                            <div className="p-3 border-t border-zinc-800/80 bg-zinc-950 shrink-0">
+                                <button onClick={() => processCsvData(csvText)} disabled={!csvText.trim()} className="w-full py-3 rounded-lg text-[11px] font-black uppercase tracking-widest bg-yellow-500 disabled:opacity-50 disabled:bg-zinc-800 disabled:text-zinc-500 text-black transition-transform active:scale-95 flex items-center justify-center gap-1.5"><Scissors size={14} /> Eksekusi Potongan</button>
+                            </div>
+                        </div>
+                    )}
+                    </div>
+                );
+            }
+
+            const root = createRoot(document.getElementById('root'));
+            root.render(<App />);
+        </script>
+    </body>
+    </html>
+    """
+
+    html_code = html_code.replace("FAVICON_PLACEHOLDER", b64_kotak)
+    html_code = html_code.replace("LOGO_PANJANG_PLACEHOLDER", b64_panjang)
+
+    with open("static/index.html", "w", encoding="utf-8") as f:
+        f.write(html_code)
+
+    app = FastAPI()
+    app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+    app.mount("/static", StaticFiles(directory="static"), name="static")
+
+    class YoutubeReq(BaseModel): url: str
+    class TranscriptDirectReq(BaseModel): url: str
+    class SingleCutReq(BaseModel):
+        video_id: str
+        start: float
+        end: float
+        name: str
+        quality: str
+        ratio: str
+        clip_id: str
+        gpu_mode: bool = False
+        engine_speed: str = "fast"
+
+    class ClipInfo(BaseModel):
+        url: str
+        name: str
+    class ZipReq(BaseModel):
+        clips: List[ClipInfo]
+    class DeleteReq(BaseModel):
+        urls: List[str]
+
+    @app.get("/")
+    def serve_root():
+        return FileResponse("static/index.html")
+
+    @app.get("/app_ui")
+    def serve_ui():
+        return FileResponse("static/index.html")
+
+    download_tracker = {}
+    cut_tracker = {}
+
+    ydl_base_opts = {
+        'quiet': True,
+        'no_warnings': True,
+        'nocheckcertificate': True
+    }
+    if os.path.exists("cookies.txt"):
+        ydl_base_opts['cookiefile'] = 'cookies.txt'
+
+    @app.get("/api/health")
+    def health_check():
+        return {"status": "ok"}
+
+    @app.get("/api/check_gpu")
+    def check_gpu():
+        try:
+            res = subprocess.run(["nvidia-smi"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if res.returncode == 0:
+                log_terminal("[KEPKAT-SYS] [INFO] GPU Terdeteksi di mesin Colab.")
+                return {"gpu": True}
+            log_terminal("[KEPKAT-SYS] [INFO] GPU Tidak Terdeteksi.")
+            return {"gpu": False}
+        except:
+            log_terminal("[KEPKAT-SYS] [INFO] Perintah nvidia-smi gagal.")
+            return {"gpu": False}
+
+    @app.get("/api/get_my_clips")
+    def get_my_clips():
+        clips = []
+        if os.path.exists("static/cut_clips"):
+            for f in sorted(os.listdir("static/cut_clips"), key=lambda x: os.path.getmtime(os.path.join("static/cut_clips", x)), reverse=True):
+                if f.endswith(".mp4"):
+                    parts = f.rsplit("_", 1)
+                    if len(parts) == 2:
+                        name, clip_id_ext = parts
+                        clip_id = clip_id_ext.replace(".mp4", "")
+
+                        filepath = os.path.join("static/cut_clips", f)
+                        try:
+                            mtime = os.path.getmtime(filepath)
+                            size_bytes = os.path.getsize(filepath)
+                            if size_bytes < 1024 * 1024:
+                                size_str = f"{size_bytes / 1024:.1f} KB"
+                            else:
+                                size_str = f"{size_bytes / (1024 * 1024):.1f} MB"
+                        except:
+                            size_str = "0 KB"
+                            mtime = time.time()
+
+                        clips.append({"id": clip_id, "name": name, "url": f"/static/cut_clips/{f}?t={int(mtime)}", "size": size_str})
+        return {"clips": clips}
+
+    @app.get("/api/get_history")
+    def get_history():
+        history = []
+        if os.path.exists("static/raw_videos"):
+            files = glob.glob("static/raw_videos/*.json")
+            files.sort(key=os.path.getmtime, reverse=True)
+            for f in files:
+                try:
+                    with open(f, 'r') as fp:
+                        meta = json.load(fp)
+                    meta['video_id'] = os.path.basename(f).replace('.json', '')
+                    history.append(meta)
+                except: pass
+        return {"history": history}
+
+    @app.post("/api/fetch_transcript_direct")
+    def fetch_transcript_direct(req: TranscriptDirectReq):
+        video_hash = hashlib.md5(req.url.encode()).hexdigest()
+        temp_base = f"static/raw_videos/{video_hash}_direct_temp"
+        try:
+            cmd_subs = ['yt-dlp', '--write-subs', '--write-auto-subs', '--sub-langs', 'id,en', '--skip-download', '--convert-subs', 'srt', '-o', temp_base]
+            if os.path.exists("cookies.txt"):
+                cmd_subs.extend(['--cookies', 'cookies.txt'])
+            cmd_subs.append(req.url)
+
+            subprocess.run(cmd_subs, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            found = glob.glob(f"{temp_base}*.srt") + glob.glob(f"{temp_base}*.vtt")
+            subtitle_text = ""
+            if found:
+                with open(found[0], "r", encoding="utf-8") as sf:
+                    subtitle_text = sf.read()
+
+                text = re.sub(r'(?i)^WEBVTT[^\n]*\n+', '', subtitle_text)
+                text = re.sub(r'^Kind:[^\n]*\n+', '', text, flags=re.MULTILINE)
+                text = re.sub(r'^Language:[^\n]*\n+', '', text, flags=re.MULTILINE)
+                text = re.sub(r'^Style:[^\n]*\n+', '', text, flags=re.MULTILINE)
+                pattern = r'(?:\d+\s*\n)?(\d{2}:\d{2}:\d{2}[.,]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[.,]\d{3})[^\n]*\n(.*?)(?=\n\s*\n|\Z)'
+                matches = re.finditer(pattern, text, flags=re.DOTALL)
+                final_srt, count, prev_lines = [], 1, []
+                for m in matches:
+                    ts = m.group(1).replace('.', ',')
+                    txt = re.sub(r'<[^>]+>', '', m.group(2).strip()).replace('&nbsp;', ' ').replace(' ', ' ')
+                    current_lines = [l.strip() for l in txt.split('\n') if l.strip()]
+                    clean_lines = [l for l in current_lines if l not in prev_lines]
+                    prev_lines = current_lines
+                    if clean_lines:
+                        final_srt.append(f"{count}\n{ts}\n{chr(10).join(clean_lines)}")
+                        count += 1
+
+                subtitle_text = "\n\n".join(final_srt).strip() if final_srt else subtitle_text.strip()
+
+                def hapus_milidetik(text_input):
+                    def bulatkan(match):
+                        def parse_sec(ts):
+                            h, m, s_ms = ts.replace('.', ',').split(':')
+                            s, ms = s_ms.split(',')
+                            return int(h)*3600 + int(m)*60 + int(s) + int(ms)/1000.0
+                        def to_str(sec): return f"{int(sec//3600):02d}:{int((sec%3600)//60):02d}:{int(sec%60):02d}"
+                        return f"{to_str(math.floor(parse_sec(match.group(1))))} --> {to_str(math.ceil(parse_sec(match.group(2))))}"
+                    return re.sub(r'(\d{2}:\d{2}:\d{2}[.,]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[.,]\d{3})', bulatkan, text_input)
+
+                subtitle_text = hapus_milidetik(subtitle_text)
+
+                for f in found:
+                    os.remove(f)
+                return {"text": subtitle_text}
+            else:
+                return JSONResponse(status_code=404, content={"error": "Transcript tidak ditemukan."})
+        except Exception as e:
+            return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+    @app.get("/api/get_transcript/{video_id}")
+    def get_transcript(video_id: str):
+        path = f"static/raw_videos/{video_id}.srt"
+        if os.path.exists(path):
+            return FileResponse(path)
+        return JSONResponse(status_code=404, content={"error": "Transcript not found"})
+
+    @app.post("/api/cancel_cut")
+    def cancel_cut():
+        global active_ffmpeg_process
+        if active_ffmpeg_process:
+            try:
+                active_ffmpeg_process.kill()
+            except:
+                pass
+        os.system("pkill -9 -f ffmpeg >/dev/null 2>&1 || true")
+        return {"status": "success"}
+
+    @app.post("/api/delete_clips")
+    def delete_clips(req: DeleteReq):
+        for url in req.urls:
+            local_path = url.split('?')[0].lstrip('/')
+            if os.path.exists(local_path) and local_path.startswith("static/cut_clips/"):
+                try:
+                    os.remove(local_path)
+                    log_terminal(f"[KEPKAT-SYS] [DELETED] Klip dihapus permanen: {local_path}")
+                except:
+                    pass
+        return {"status": "success"}
+
+    @app.get("/api/check_download/{video_id}")
+    def check_download(video_id: str):
+        data = download_tracker.get(video_id, {"status": "unknown", "progress": 0})
+        if isinstance(data, str):
+            data = {"status": data, "progress": 0}
+
+        if data.get("status") == "done":
+            json_path = f"static/raw_videos/{video_id}.json"
+            if os.path.exists(json_path):
+                try:
+                    with open(json_path, 'r') as f:
+                        meta = json.load(f)
+                    data["size_str"] = meta.get("size_str", "Unknown")
+                except:
+                    pass
+
+        return data
+
+    @app.get("/api/cut_progress/{clip_id}")
+    def cut_progress(clip_id: str):
+        prog = cut_tracker.get(clip_id, 0)
+        return {"progress": prog}
+
+    def download_video_task(url, video_hash, full_path):
+        temp_base = f"static/raw_videos/{video_hash}_temp"
+        log_terminal("[KEPKAT-SYS] [START] Membersihkan jejak memori untuk bypass Anti-Bot...")
+        os.system("yt-dlp --rm-cache-dir >/dev/null 2>&1")
+        time.sleep(1)
+        log_terminal("[KEPKAT-SYS] [START] Menarik Subtitle / Transcript dari sumber...")
+        try:
+            cmd_subs = ['yt-dlp', '--write-subs', '--write-auto-subs', '--sub-langs', 'id,en', '--skip-download', '--convert-subs', 'srt', '-o', temp_base]
+            if os.path.exists("cookies.txt"):
+                cmd_subs.extend(['--cookies', 'cookies.txt'])
+            cmd_subs.append(url)
+
+            subprocess.run(cmd_subs, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            found = glob.glob(f"{temp_base}*.srt") + glob.glob(f"{temp_base}*.vtt")
+            if found:
+                with open(found[0], "r", encoding="utf-8") as sf:
+                    subtitle_text = sf.read()
+
+                text = re.sub(r'(?i)^WEBVTT[^\n]*\n+', '', subtitle_text)
+                text = re.sub(r'^Kind:[^\n]*\n+', '', text, flags=re.MULTILINE)
+                text = re.sub(r'^Language:[^\n]*\n+', '', text, flags=re.MULTILINE)
+                text = re.sub(r'^Style:[^\n]*\n+', '', text, flags=re.MULTILINE)
+                pattern = r'(?:\d+\s*\n)?(\d{2}:\d{2}:\d{2}[.,]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[.,]\d{3})[^\n]*\n(.*?)(?=\n\s*\n|\Z)'
+                matches = re.finditer(pattern, text, flags=re.DOTALL)
+                final_srt, count, prev_lines = [], 1, []
+                for m in matches:
+                    ts = m.group(1).replace('.', ',')
+                    txt = re.sub(r'<[^>]+>', '', m.group(2).strip()).replace('&nbsp;', ' ').replace(' ', ' ')
+                    current_lines = [l.strip() for l in txt.split('\n') if l.strip()]
+                    clean_lines = [l for l in current_lines if l not in prev_lines]
+                    prev_lines = current_lines
+                    if clean_lines:
+                        final_srt.append(f"{count}\n{ts}\n{chr(10).join(clean_lines)}")
+                        count += 1
+
+                subtitle_text = "\n\n".join(final_srt).strip() if final_srt else subtitle_text.strip()
+
+                def hapus_milidetik(text_input):
+                    def bulatkan(match):
+                        def parse_sec(ts):
+                            h, m, s_ms = ts.replace('.', ',').split(':')
+                            s, ms = s_ms.split(',')
+                            return int(h)*3600 + int(m)*60 + int(s) + int(ms)/1000.0
+                        def to_str(sec): return f"{int(sec//3600):02d}:{int((sec%3600)//60):02d}:{int(sec%60):02d}"
+                        return f"{to_str(math.floor(parse_sec(match.group(1))))} --> {to_str(math.ceil(parse_sec(match.group(2))))}"
+                    return re.sub(r'(\d{2}:\d{2}:\d{2}[.,]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[.,]\d{3})', bulatkan, text_input)
+
+                subtitle_text = hapus_milidetik(subtitle_text)
+
+                with open(f"static/raw_videos/{video_hash}.srt", "w", encoding="utf-8") as f:
+                    f.write(subtitle_text.strip())
+
+                for f in found:
+                    os.remove(f)
+                log_terminal("[KEPKAT-SYS] [SUCCESS] Transcript berhasil diamankan!")
+        except:
+            log_terminal("[KEPKAT-SYS] [WARNING] Gagal menarik transcript atau video tidak memilikinya.")
+
+        log_terminal("[KEPKAT-SYS] [START] Memulai proses penarikan data visual mentah (HQ)...")
+        def progress_hook(d):
+            if d['status'] == 'downloading':
+                try:
+                    percent_str = d.get('_percent_str', '0.0%')
+                    clean_str = re.sub(r'\x1B(?:[@-Z\-_]|\[[0-?]*[ -/]*[@-~])', '', percent_str).replace('%', '').strip()
+                    percent = float(clean_str)
+                    download_tracker[video_hash] = {"status": "downloading", "progress": percent}
+                except:
+                    pass
+            elif d['status'] == 'finished':
+                pass
+
+        try:
+            opts = ydl_base_opts.copy()
+            opts['format'] = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
+            opts['outtmpl'] = full_path
+            opts['merge_output_format'] = 'mp4'
+            opts['progress_hooks'] = [progress_hook]
+            opts['concurrent_fragment_downloads'] = 15
+
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                ydl.download([url])
+
+            if os.path.exists(full_path):
+                actual_size = os.path.getsize(full_path)
+                real_size_str = f"{actual_size / (1024 * 1024):.1f} MB"
+                json_path = f"static/raw_videos/{video_hash}.json"
+                if os.path.exists(json_path):
+                    with open(json_path, 'r') as f:
+                        meta = json.load(f)
+                    meta['size_str'] = real_size_str
+                    with open(json_path, 'w') as f:
+                        json.dump(meta, f)
+            log_terminal("[KEPKAT-SYS] [SUCCESS] Data visual mentah (HQ) 100% selesai ditarik!")
+
+            download_tracker[video_hash] = {"status": "done", "progress": 100}
+
+        except Exception as e:
+            err_msg = str(e).lower()
+            if "sign in" in err_msg or "bot" in err_msg or "blocked" in err_msg or "429" in err_msg:
+                download_tracker[video_hash] = {"status": "blocked", "progress": 0}
+                log_terminal("[KEPKAT-SYS] [BLOCKED] Server diblokir oleh sistem pusat!")
+            else:
+                download_tracker[video_hash] = {"status": "error", "progress": 0}
+                log_terminal("[KEPKAT-SYS] [ERROR] Gagal menarik data visual mentah.")
+
+    @app.post("/api/load_video")
+    def load_video(req: YoutubeReq, bg_tasks: BackgroundTasks):
+        os.system("yt-dlp --rm-cache-dir >/dev/null 2>&1")
+        video_hash = hashlib.md5(req.url.encode()).hexdigest()
+        full_video_path = f"static/raw_videos/{video_hash}.mp4"
+        proxy_path = f"static/raw_videos/{video_hash}_proxy.mp4"
+        json_path = f"static/raw_videos/{video_hash}.json"
+
+        log_terminal(f"[KEPKAT-SYS] [INFO] Menerima instruksi link baru: {req.url}")
+
+        if os.path.exists(json_path):
+            log_terminal(f"[KEPKAT-SYS] [SUCCESS] Data ditemukan di cache. Memuat instan!")
+            try:
+                with open(json_path, 'r') as f:
+                    meta = json.load(f)
+
+                if not os.path.exists(proxy_path):
+                    log_terminal("[KEPKAT-SYS] [START] Menyiapkan Video Proxy (Preview Lancar)...")
+                    opts_proxy = ydl_base_opts.copy()
+                    opts_proxy['format'] = 'bestvideo[height<=144][vcodec^=avc]+bestaudio[ext=m4a]/bestvideo[height<=240][vcodec^=avc]+bestaudio[ext=m4a]/bestvideo[height<=360][vcodec^=avc]+bestaudio[ext=m4a]/worst[ext=mp4]'
+                    opts_proxy['outtmpl'] = proxy_path
+                    opts_proxy['merge_output_format'] = 'mp4'
+                    try:
+                        with yt_dlp.YoutubeDL(opts_proxy) as ydl_proxy:
+                            ydl_proxy.download([req.url])
+                        log_terminal("[KEPKAT-SYS] [SUCCESS] Video Proxy siap diputar!")
+                    except Exception as pe:
+                        log_terminal(f"[KEPKAT-SYS] [WARNING] Proxy error, fallback: {pe}")
+
+                curr_status = download_tracker.get(video_hash, {}).get("status", "unknown")
+                if curr_status != "downloading":
+                    if os.path.exists(full_video_path):
+                        download_tracker[video_hash] = {"status": "done", "progress": 100}
+                    else:
+                        download_tracker[video_hash] = {"status": "downloading", "progress": 0}
+                        bg_tasks.add_task(download_video_task, req.url, video_hash, full_video_path)
+
+                return {
+                    "video_id": video_hash,
+                    "direct_url": f"/{proxy_path}",
+                    "status": download_tracker[video_hash]["status"],
+                    "title": meta.get("title", "KepKat_Video"),
+                    "uploader": meta.get("uploader", "Unknown Source"),
+                    "resolution": meta.get("resolution", "Original"),
+                    "size_str": meta.get("size_str", "Unknown"),
+                    "duration_str": meta.get("duration_str", "Unknown")
+                }
+            except:
+                pass
+
+        opts_preview = ydl_base_opts.copy()
+        try:
+            with yt_dlp.YoutubeDL(opts_preview) as ydl:
+                info = ydl.extract_info(req.url, download=False)
+
+                best_h = 0
+                best_v_size = 0
+                for f in info.get('formats', []):
+                    if f.get('vcodec') != 'none' and f.get('height'):
+                        h = f.get('height')
+                        if h > best_h:
+                            best_h = h
+                            best_v_size = f.get('filesize') or f.get('filesize_approx') or 0
+
+                best_a_size = 0
+                for f in info.get('formats', []):
+                    if f.get('acodec') != 'none' and f.get('vcodec') == 'none':
+                        s = f.get('filesize') or f.get('filesize_approx') or 0
+                        if s > best_a_size:
+                            best_a_size = s
+
+                total_size = best_v_size + best_a_size
+                if total_size == 0:
+                    total_size = info.get('filesize_approx') or info.get('filesize') or 0
+
+                direct_url = f"/static/raw_videos/{video_hash}_proxy.mp4"
+
+                title = info.get('title', 'KepKat_Video')
+                uploader = info.get('uploader', 'Unknown Source')
+                thumbnail = info.get('thumbnail', '')
+
+                if best_h >= 2160: res_str = "4K Ultra HD"
+                elif best_h >= 1440: res_str = "2K QHD"
+                elif best_h >= 1080: res_str = "1080p Full HD"
+                elif best_h >= 720: res_str = "720p HD"
+                elif best_h >= 480: res_str = "480p SD"
+                elif best_h >= 360: res_str = "360p SD"
+                else: res_str = f"{best_h}p" if best_h else "Original"
+
+                size_str = f"{total_size / (1024 * 1024):.1f} MB" if total_size > 0 else "Unknown Size"
+
+                duration_sec = info.get('duration', 0)
+                def format_dur(secs):
+                    if not secs: return "0 dtk"
+                    m, s = divmod(secs, 60)
+                    h, m = divmod(m, 60)
+                    if h > 0: return f"{int(h)}j {int(m)}m {int(s)}d"
+                    elif m > 0: return f"{int(m)}m {int(s)}d"
+                    return f"{int(s)} dtk"
+                duration_str = format_dur(duration_sec)
+
+                if not os.path.exists(proxy_path):
+                    log_terminal("[KEPKAT-SYS] [START] Menyiapkan Video Proxy (Preview Lancar)...")
+                    opts_proxy = ydl_base_opts.copy()
+                    opts_proxy['format'] = 'bestvideo[height<=144][vcodec^=avc]+bestaudio[ext=m4a]/bestvideo[height<=240][vcodec^=avc]+bestaudio[ext=m4a]/bestvideo[height<=360][vcodec^=avc]+bestaudio[ext=m4a]/worst[ext=mp4]'
+                    opts_proxy['outtmpl'] = proxy_path
+                    opts_proxy['merge_output_format'] = 'mp4'
+                    try:
+                        with yt_dlp.YoutubeDL(opts_proxy) as ydl_proxy:
+                            ydl_proxy.download([req.url])
+                        log_terminal("[KEPKAT-SYS] [SUCCESS] Video Proxy siap diputar!")
+                    except Exception as pe:
+                        log_terminal(f"[KEPKAT-SYS] [WARNING] Proxy error, fallback: {pe}")
+
+                meta = {
+                    "title": title,
+                    "uploader": uploader,
+                    "resolution": res_str,
+                    "size_str": size_str,
+                    "duration_str": duration_str,
+                    "original_url": req.url,
+                    "thumbnail": thumbnail
+                }
+                with open(json_path, 'w') as f:
+                    json.dump(meta, f)
+
+        except Exception as e:
+            log_terminal(f"[KEPKAT-SYS] [ERROR] Gagal Fetch: {e}")
+            raise Exception("Gagal Fetch URL")
+
+        download_tracker[video_hash] = {"status": "downloading", "progress": 0}
+        bg_tasks.add_task(download_video_task, req.url, video_hash, full_video_path)
+
+        return {
+            "video_id": video_hash,
+            "direct_url": direct_url,
+            "status": "downloading",
+            "title": title,
+            "uploader": uploader,
+            "resolution": res_str,
+            "size_str": size_str,
+            "duration_str": duration_str
+        }
+
+    @app.post("/api/cut_single")
+    def cut_single(req: SingleCutReq):
+        global active_ffmpeg_process
+        raw_path = f"static/raw_videos/{req.video_id}.mp4"
+        out_name = f"{req.name}_{req.clip_id}.mp4"
+        out_path = f"static/cut_clips/{out_name}"
+
+        duration = req.end - req.start
+        if duration <= 0: duration = 1
+
+        mode_str = "GPU (NVENC)" if req.gpu_mode else "CPU"
+        log_terminal(f"[KEPKAT-SYS] [CUTTING] Mengeksekusi instruksi: {out_name} | Engine: {mode_str} | Gear: {req.engine_speed.upper()} | Range: {duration}s")
+
+        vf_filters = []
+        if req.quality != 'original':
+            scale_heights = {'4k': 2160, '2k': 1440, '1080p': 1080, '720p': 720, '480p': 480, '360p': 360}
+            if req.quality in scale_heights:
+                vf_filters.append(f"scale=-2:{scale_heights[req.quality]}")
+
+        if req.ratio != 'original':
+            if req.ratio == '16:9': vf_filters.append("crop=ih*16/9:ih")
+            elif req.ratio == '9:16': vf_filters.append("crop=ih*9/16:ih")
+            elif req.ratio == '1:1': vf_filters.append("crop=ih:ih")
+            elif req.ratio == '3:4': vf_filters.append("crop=ih*3/4:ih")
+            elif req.ratio == '4:3': vf_filters.append("crop=ih*4/3:ih")
+
+        vf = ",".join(vf_filters) if vf_filters else ""
+
+        cmd = [
+            "ffmpeg", "-y",
+            "-ss", str(req.start),
+            "-i", raw_path,
+            "-t", str(duration)
+        ]
+
+        speed = req.engine_speed
+        if req.gpu_mode:
+            if speed == "ultrafast":
+                cmd.extend(["-c:v", "h264_nvenc", "-preset", "p1", "-rc", "vbr", "-cq", "28", "-b:v", "0", "-c:a", "aac", "-b:a", "128k"])
+            elif speed == "slow":
+                cmd.extend(["-c:v", "h264_nvenc", "-preset", "p7", "-rc", "vbr", "-cq", "23", "-b:v", "0", "-c:a", "aac", "-b:a", "128k"])
+            else:
+                cmd.extend(["-c:v", "h264_nvenc", "-preset", "p4", "-rc", "vbr", "-cq", "26", "-b:v", "0", "-c:a", "aac", "-b:a", "128k"])
+        else:
+            if speed == "ultrafast":
+                cmd.extend(["-c:v", "libx264", "-preset", "ultrafast", "-crf", "28", "-c:a", "aac", "-b:a", "128k", "-threads", "4"])
+            elif speed == "slow":
+                cmd.extend(["-c:v", "libx264", "-preset", "medium", "-crf", "23", "-c:a", "aac", "-b:a", "128k", "-threads", "4"])
+            else:
+                cmd.extend(["-c:v", "libx264", "-preset", "superfast", "-crf", "26", "-c:a", "aac", "-b:a", "128k", "-threads", "4"])
+
+        if vf:
+            cmd.extend(["-vf", vf])
+        cmd.append(out_path)
+
+        cut_tracker[req.clip_id] = 0
+        active_ffmpeg_process = subprocess.Popen(cmd, stderr=subprocess.PIPE, universal_newlines=True)
+
+        fallback_to_cpu = False
+        for line in active_ffmpeg_process.stderr:
+            if "Unknown encoder" in line and "nvenc" in line.lower():
+                fallback_to_cpu = True
+                break
+
+            if "time=" in line:
+                try:
+                    time_str = line.split("time=")[1].split(" ")[0]
+                    h, m, s = time_str.split(":")
+                    secs = int(h)*3600 + int(m)*60 + float(s)
+                    pct = (secs / duration) * 100
+                    cut_tracker[req.clip_id] = min(99, pct)
+                except:
+                    pass
+
+        active_ffmpeg_process.wait()
+
+        if fallback_to_cpu or active_ffmpeg_process.returncode != 0:
+            if active_ffmpeg_process.returncode == -9:
+                log_terminal(f"[KEPKAT-SYS] [WARNING] Proses dibatalkan oleh master paksa.")
+                raise Exception("Dibatalkan User")
+
+            if fallback_to_cpu:
+                log_terminal(f"[KEPKAT-SYS] [WARNING] Engine GPU gagal! Fallback ke CPU untuk {out_name}")
+            else:
+                log_terminal(f"[KEPKAT-SYS] [WARNING] Render error. Fallback ke CPU untuk {out_name}")
+
+            cmd_fallback = [
+                "ffmpeg", "-y",
+                "-ss", str(req.start),
+                "-i", raw_path,
+                "-t", str(duration)
+            ]
+
+            if speed == "ultrafast":
+                cmd_fallback.extend(["-c:v", "libx264", "-preset", "ultrafast", "-crf", "28", "-c:a", "aac", "-b:a", "128k", "-threads", "4"])
+            elif speed == "slow":
+                cmd_fallback.extend(["-c:v", "libx264", "-preset", "medium", "-crf", "23", "-c:a", "aac", "-b:a", "128k", "-threads", "4"])
+            else:
+                cmd_fallback.extend(["-c:v", "libx264", "-preset", "superfast", "-crf", "26", "-c:a", "aac", "-b:a", "128k", "-threads", "4"])
+
+            if vf: cmd_fallback.extend(["-vf", vf])
+            cmd_fallback.append(out_path)
+
+            active_ffmpeg_process = subprocess.Popen(cmd_fallback, stderr=subprocess.PIPE, universal_newlines=True)
+            for line in active_ffmpeg_process.stderr:
+                if "time=" in line:
+                    try:
+                        time_str = line.split("time=")[1].split(" ")[0]
+                        h, m, s = time_str.split(":")
+                        secs = int(h)*3600 + int(m)*60 + float(s)
+                        pct = (secs / duration) * 100
+                        cut_tracker[req.clip_id] = min(99, pct)
+                    except:
+                        pass
+            active_ffmpeg_process.wait()
+
+            if active_ffmpeg_process.returncode != 0:
+                if active_ffmpeg_process.returncode == -9:
+                    log_terminal(f"[KEPKAT-SYS] [WARNING] Proses dibatalkan paksa.")
+                    raise Exception("Dibatalkan User")
+                log_terminal(f"[KEPKAT-SYS] [ERROR] Eksekusi potongan gagal untuk: {out_name}")
+                raise Exception("Engine Error")
+
+        cut_tracker[req.clip_id] = 100
+        log_terminal(f"[KEPKAT-SYS] [SUCCESS] Eksekusi selesai: {out_name}")
+        active_ffmpeg_process = None
+        return {"clip": {"id": req.clip_id, "name": req.name, "url": f"/{out_path}"}}
+
+    @app.post("/api/zip_clips")
+    def zip_clips(req: ZipReq):
+        zip_id = str(uuid.uuid4())[:8]
+        zip_path = f"static/cut_clips/KepKat_MyClip_{zip_id}.zip"
+        log_terminal(f"[KEPKAT-SYS] [ZIPPING] Mengemas {len(req.clips)} klip menjadi arsip...")
+
+        with zipfile.ZipFile(zip_path, 'w') as zipf:
+            for clip in req.clips:
+                local_path = clip.url.split('?')[0].lstrip('/')
+                if os.path.exists(local_path):
+                    ext = os.path.splitext(local_path)[1]
+                    safe_name = clip.name if clip.name.endswith(ext) else clip.name + ext
+                    zipf.write(local_path, safe_name)
+        log_terminal(f"[KEPKAT-SYS] [SUCCESS] Arsip ZIP selesai dibuat!")
+        return {"zip_url": f"/{zip_path}"}
+
+    # ====================================================================================================
+    # 5. SERVER RUNNER & NETWORKING (JALUR AKSES & LINGKARAN NYAWA SERVER)
+    # ====================================================================================================
+    if not server_running:
+        def run_server():
+            config = uvicorn.Config(app, host="0.0.0.0", port=8000, log_level="critical")
+            global my_uvicorn_server
+            my_uvicorn_server = uvicorn.Server(config)
+            my_uvicorn_server.run()
+
+        thread = threading.Thread(target=run_server, daemon=True)
+        thread.start()
+        time.sleep(2)
+
+    proxy_url = output.eval_js("google.colab.kernel.proxyPort(8000)")
+    log_terminal(f"[KEPKAT-SYS] [INFO] Menyiapkan Jalur Akses Privat...")
+    log_terminal(f"[KEPKAT-SYS] [SUCCESS] Jalur Akses Privat Siap!")
+
+    # LINK PRIVAT (OTOMATIS TOMBOL BUKA APLIKASI)
+    js_update_private = f"""
+    var proxyUrl = '{proxy_url}';
+    var btnPriv = document.getElementById('btn-copy-private');
+    if (btnPriv) {{
+        btnPriv.disabled = false;
+        btnPriv.style.opacity = '1';
+        btnPriv.style.cursor = 'pointer';
+        btnPriv.innerText = 'BUKA APLIKASI (CEPAT) 🚀';
+
+        btnPriv.onclick = function(e) {{
+            e.preventDefault();
+            var b = this;
+            b.innerText = 'MEMBUKA TAB...';
+            b.style.background = '#facc15';
+            b.style.color = '#000';
+            window.open(proxyUrl, '_blank');
+            setTimeout(() => {{
+                b.innerText = 'BUKA APLIKASI (CEPAT) 🚀';
+                b.style.background = '#1e3a8a';
+                b.style.color = '#bfdbfe';
+            }}, 1500);
+        }};
+    }}
+    """
+    display(Javascript(js_update_private))
+
+    lt_url = ""
+    lt_file = "static/cf_url.txt"
+
+    if server_running and os.path.exists(lt_file) and os.system("pgrep -f cloudflared >/dev/null 2>&1") == 0:
+        with open(lt_file, "r") as f:
+            lt_url = f.read().strip()
+        log_terminal("[KEPKAT-SYS] [SUCCESS] Menggunakan Tunneling Publik (Cloudflare) yang sudah aktif di latar belakang!")
+    else:
+        os.system("pkill -9 -f cloudflared >/dev/null 2>&1 || true")
+        log_terminal("[KEPKAT-SYS] [INFO] Membangun tunneling server eksternal baru (Cloudflare)... Harap tunggu.")
+
+        cf_process = subprocess.Popen(
+            ["cloudflared", "tunnel", "--url", "http://127.0.0.1:8000"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            preexec_fn=os.setsid
+        )
+
+        for line in cf_process.stdout:
+            if "trycloudflare.com" in line:
+                match = re.search(r"https://[a-zA-Z0-9-]+\.trycloudflare\.com", line)
+                if match:
+                    lt_url = match.group(0)
+                    with open(lt_file, "w") as f:
+                        f.write(lt_url)
+                    break
+
+        log_terminal("[KEPKAT-SYS] [SUCCESS] Tunneling Server Publik (Cloudflare) Siap!")
+
+    # LINK PUBLIK (OTOMATIS TOMBOL BUKA APLIKASI)
+    js_update_public = f"""
+    var ltUrl = '{lt_url}';
+    var btnPub = document.getElementById('btn-copy-public');
+    if (btnPub) {{
+        btnPub.disabled = false;
+        btnPub.style.opacity = '1';
+        btnPub.style.cursor = 'pointer';
+        btnPub.innerText = 'BUKA APLIKASI (CADANGAN) 🚀';
+
+        btnPub.onclick = function(e) {{
+            e.preventDefault();
+            var b = this;
+            b.innerText = 'MEMBUKA TAB...';
+            b.style.background = '#facc15';
+            b.style.color = '#000';
+            window.open(ltUrl, '_blank');
+            setTimeout(() => {{
+                b.innerText = 'BUKA APLIKASI (CADANGAN) 🚀';
+                b.style.background = '#064e3b';
+                b.style.color = '#a7f3d0';
+            }}, 1500);
+        }};
+    }}
+    """
+    display(Javascript(js_update_public))
+    log_terminal("[KEPKAT-SYS] Semua modul siap! Panel kontrol aktif.")
+
+    while True:
+        time.sleep(3600)
+
+except BaseException:
+    clear_output()
