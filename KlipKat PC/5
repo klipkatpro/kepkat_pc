@@ -1,0 +1,1523 @@
+# @title CELL 5: HALAMAN EDIT KLIP (MODUL MULTI-CLIP CROP & LAYOUT)
+# ==============================================================================
+import os
+os.makedirs("static/pages", exist_ok=True)
+
+edit_klip_code = r"""
+const boxColors = ['border-amber-400', 'border-blue-400', 'border-green-400', 'border-purple-400', 'border-pink-400', 'border-orange-400'];
+const bgColors = ['bg-amber-400', 'bg-blue-400', 'bg-green-400', 'bg-purple-400', 'bg-pink-400', 'bg-orange-400'];
+
+const IconUndo = () => <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>;
+const IconRedo = () => <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"/></svg>;
+const IconLock = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>;
+const IconUnlock = () => <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>;
+const IconMaximize = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>;
+const IconSubtitle = () => <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="14" x="3" y="5" rx="2" ry="2"/><path d="M7 15h4M15 15h2M7 11h2M13 11h4"/></svg>;
+const IconTransition = () => <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21c3 0 7-1 9-9s6-9 9-9"/></svg>;
+const IconZoomIn = () => <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>;
+const IconZoomOut = () => <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>;
+
+const Btn = ({ onClick, isActive, activeColor = 'amber', icon, label, disabled, title }) => {
+    const activeClass = activeColor === 'blue'
+        ? 'bg-blue-500 text-white shadow-[0_0_10px_rgba(59,130,246,0.5)]'
+        : 'bg-amber-500 text-zinc-900 shadow-[0_0_10px_rgba(245,158,11,0.4)]';
+
+    return (
+        <button
+            onClick={onClick} disabled={disabled} title={title}
+            className={`shrink-0 flex flex-col items-center justify-center w-8 h-8 rounded-lg transition-all duration-200 ${disabled ? 'opacity-30 cursor-not-allowed' : 'active:scale-95'} ${isActive ? activeClass : 'bg-zinc-700/60 text-zinc-300 hover:bg-zinc-600 hover:text-white shadow-sm'}`}
+        >
+            {icon}
+            {label && <span className="text-[5px] font-black mt-0.5 uppercase leading-none">{label}</span>}
+        </button>
+    );
+};
+
+const BtnGroup = ({ children, className="" }) => (
+    <div className={`flex items-center gap-1.5 p-1 bg-zinc-900/40 rounded-xl shadow-inner ${className}`}>
+        {children}
+    </div>
+);
+
+const CropBox = ({ boxData, boxIndex, frameCount, isSmoothModeActive, activeBoxIndex, handlePointerDown }) => (
+    <div className={`absolute border-[2px] pointer-events-auto cursor-move flex flex-col group ${boxColors[boxIndex]}`}
+         style={{
+             left: `${boxData.x}%`,
+             top: `${boxData.y}%`,
+             width: `${boxData.w}%`,
+             height: `${boxData.h}%`,
+             boxShadow: 'inset 0 0 20px rgba(0,0,0,0.5)',
+             transition: (isSmoothModeActive && activeBoxIndex === boxIndex) ? 'all 0.6s cubic-bezier(0.1, 1, 0.2, 1)' : 'none'
+         }}
+         onPointerDown={(e) => handlePointerDown(e, boxIndex, null)}>
+        <div className="absolute inset-0 z-0 bg-white/0"></div>
+        <div className={`absolute -top-5 left-1/2 -translate-x-1/2 px-2 py-0.5 text-[9px] font-black text-zinc-900 tracking-widest uppercase rounded shadow-md ${bgColors[boxIndex]}`}>F{boxIndex + 1}</div>
+
+        <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 pointer-events-none opacity-0 group-hover:opacity-100 group-active:opacity-100 transition-opacity"><div className="border-r border-b border-white/40"></div><div className="border-r border-b border-white/40"></div><div className="border-b border-white/40"></div><div className="border-r border-b border-white/40"></div><div className="border-r border-b border-white/40"></div><div className="border-b border-white/40"></div><div className="border-r border-white/40"></div><div className="border-r border-white/40"></div><div></div></div>
+
+        <div onPointerDown={(e) => handlePointerDown(e, boxIndex, 'nw')} className="absolute -left-[4px] -top-[4px] w-3 h-3 cursor-nwse-resize z-30 bg-white border-2 border-zinc-900 shadow rounded-sm transition-transform hover:scale-125"></div>
+        <div onPointerDown={(e) => handlePointerDown(e, boxIndex, 'ne')} className="absolute -right-[4px] -top-[4px] w-3 h-3 cursor-nesw-resize z-30 bg-white border-2 border-zinc-900 shadow rounded-sm transition-transform hover:scale-125"></div>
+        <div onPointerDown={(e) => handlePointerDown(e, boxIndex, 'sw')} className="absolute -left-[4px] -bottom-[4px] w-3 h-3 cursor-nesw-resize z-30 bg-white border-2 border-zinc-900 shadow rounded-sm transition-transform hover:scale-125"></div>
+        <div onPointerDown={(e) => handlePointerDown(e, boxIndex, 'se')} className="absolute -right-[4px] -bottom-[4px] w-3 h-3 cursor-nwse-resize z-30 bg-white border-2 border-zinc-900 shadow rounded-sm transition-transform hover:scale-125"></div>
+
+        <div onPointerDown={(e) => handlePointerDown(e, boxIndex, 'n')} className="absolute top-0 left-4 right-4 h-4 -mt-2 cursor-ns-resize z-30 flex items-center justify-center group/n"><div className="w-8 h-1 bg-white/70 rounded-full opacity-0 group-hover/n:opacity-100 transition-opacity shadow"></div></div>
+        <div onPointerDown={(e) => handlePointerDown(e, boxIndex, 's')} className="absolute bottom-0 left-4 right-4 h-4 -mb-2 cursor-ns-resize z-30 flex items-center justify-center group/s"><div className="w-8 h-1 bg-white/70 rounded-full opacity-0 group-hover/s:opacity-100 transition-opacity shadow"></div></div>
+        <div onPointerDown={(e) => handlePointerDown(e, boxIndex, 'e')} className="absolute top-4 bottom-4 right-0 w-4 -mr-2 cursor-ew-resize z-30 flex items-center justify-center group/e"><div className="h-8 w-1 bg-white/70 rounded-full opacity-0 group-hover/e:opacity-100 transition-opacity shadow"></div></div>
+        <div onPointerDown={(e) => handlePointerDown(e, boxIndex, 'w')} className="absolute top-4 bottom-4 left-0 w-4 -ml-2 cursor-ew-resize z-30 flex items-center justify-center group/w"><div className="h-8 w-1 bg-white/70 rounded-full opacity-0 group-hover/w:opacity-100 transition-opacity shadow"></div></div>
+    </div>
+);
+
+const CropModal = ({ selectedClips, videoUrl, onClose, onSaveAll }) => {
+    const [modalClips, setModalClips] = useState([...selectedClips]);
+    const [activeClipId, setActiveClipId] = useState(selectedClips[0]?.id);
+    const [checkedClips, setCheckedClips] = useState([]);
+    const [lockedClips, setLockedClips] = useState([]);
+
+    const [videoAspect, setVideoAspect] = useState(16/9);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [currentTime, setCurrentTime] = useState(0);
+    const [duration, setDuration] = useState(0);
+
+    const [isScrubbing, setIsScrubbing] = useState(false);
+    const [isFullscreenModalOpen, setIsFullscreenModalOpen] = useState(false);
+
+    const [selectedKeyframes, setSelectedKeyframes] = useState([]);
+    const [contextMenu, setContextMenu] = useState(null);
+
+    const [isSmoothMode, setIsSmoothMode] = useState(false);
+    const [timelineZoom, setTimelineZoom] = useState(1);
+
+    const [history, setHistory] = useState(() => {
+        const init = {};
+        selectedClips.forEach(c => init[c.id] = { past: [], future: [] });
+        return init;
+    });
+
+    // MEMUAT DATA DARI CACHE BROWSER AGAR EDITAN TIDAK HILANG SAAT KELUAR MASUK
+    const [localCrops, setLocalCrops] = useState(() => {
+        const init = {};
+        selectedClips.forEach(c => {
+            const cachedData = localStorage.getItem(`crop_edit_data_${c.id}`);
+            if (cachedData) {
+                try {
+                    init[c.id] = JSON.parse(cachedData);
+                } catch(e) {}
+            }
+            if (!init[c.id]) {
+                init[c.id] = {
+                    isApplied: false,
+                    keyframes: [
+                        { time: 0, frameCount: 1, layout: '1-full', boxes: [{ x: 34.18, y: 0, w: 31.64, h: 100, ratio: 9/16 }], transition: 'cut' }
+                    ]
+                };
+            }
+        });
+        return init;
+    });
+
+    // MENYIMPAN DATA OTOMATIS KE CACHE SETIAP ADA PERUBAHAN
+    useEffect(() => {
+        Object.entries(localCrops).forEach(([id, data]) => {
+            localStorage.setItem(`crop_edit_data_${id}`, JSON.stringify(data));
+        });
+    }, [localCrops]);
+
+    const saveHistory = (idToSave = activeClipId) => {
+        setHistory(h => ({
+            ...h,
+            [idToSave]: {
+                past: [...(h[idToSave]?.past || []), localCrops[idToSave]],
+                future: []
+            }
+        }));
+    };
+
+    const handleUndo = () => {
+        if(lockedClips.includes(activeClipId)) return;
+        setHistory(h => {
+            const ch = h[activeClipId];
+            if (!ch || ch.past.length === 0) return h;
+            const prevState = ch.past[ch.past.length - 1];
+            setLocalCrops(prev => ({ ...prev, [activeClipId]: prevState }));
+            return { ...h, [activeClipId]: { past: ch.past.slice(0, -1), future: [localCrops[activeClipId], ...ch.future] } };
+        });
+    };
+
+    const handleRedo = () => {
+        if(lockedClips.includes(activeClipId)) return;
+        setHistory(h => {
+            const ch = h[activeClipId];
+            if (!ch || ch.future.length === 0) return h;
+            const nextState = ch.future[0];
+            setLocalCrops(prev => ({ ...prev, [activeClipId]: nextState }));
+            return { ...h, [activeClipId]: { past: [...ch.past, localCrops[activeClipId]], future: ch.future.slice(1) } };
+        });
+    };
+
+    const activeClip = modalClips.find(c => c.id === activeClipId);
+    const curClip = localCrops[activeClipId] || {};
+    const activeKeyframes = curClip.keyframes || [];
+
+    let activeData = activeKeyframes[0] || { frameCount: 1, layout: '1-full', boxes: [{ x: 34.18, y: 0, w: 31.64, h: 100, ratio: 9/16 }], transition: 'cut' };
+    let kf1 = activeKeyframes[0];
+    let kf2 = activeKeyframes[0];
+
+    for (let i = 0; i < activeKeyframes.length; i++) {
+        if (currentTime >= activeKeyframes[i].time - 0.02) {
+            kf1 = activeKeyframes[i];
+            kf2 = activeKeyframes[i + 1] || activeKeyframes[i];
+        }
+    }
+
+    // PEMBARUAN: Transisi smooth tanpa ada batasan kf1.layout === kf2.layout agar perpindahan antar layout berjalan mulus.
+    if (kf1 && kf2 && kf1 !== kf2 && kf1.transition === 'smooth' && kf1.frameCount === kf2.frameCount) {
+        const timeDiff = kf2.time - kf1.time;
+        if (timeDiff > 0) {
+            let progress = (currentTime - kf1.time) / timeDiff;
+            progress = Math.max(0, Math.min(1, progress));
+
+            // Rumus Sine In-Out yang bikin super smooth (Page Velocity)
+            let ease = -(Math.cos(Math.PI * progress) - 1) / 2;
+
+            let interpBoxes = kf1.boxes.map((b1, idx) => {
+                let b2 = kf2.boxes[idx];
+                if(!b2) return b1;
+
+                let interpW = b1.w + (b2.w - b1.w) * ease;
+                let interpH = b1.h + (b2.h - b1.h) * ease;
+                // Anti gambar penyet, rasio dihitung otomatis dari lebar/tinggi berjalan dikali video source
+                let interpRatio = (interpW / interpH) * videoAspect;
+
+                return {
+                    ...b1,
+                    x: b1.x + (b2.x - b1.x) * ease,
+                    y: b1.y + (b2.y - b1.y) * ease,
+                    w: interpW,
+                    h: interpH,
+                    ratio: interpRatio
+                };
+            });
+            activeData = { ...kf1, boxes: interpBoxes };
+        } else {
+            activeData = kf1;
+        }
+    } else {
+        activeData = kf1;
+    }
+
+    const videoRef = useRef(null);
+    const containerRef = useRef(null);
+    const timelineRef = useRef(null);
+    const timelineContainerRef = useRef(null);
+
+    const [activeBoxIndex, setActiveBoxIndex] = useState(null);
+    const dragStart = useRef({
+        isDragging: false, handle: null, boxIndex: null, x: 0, y: 0, startX: 0, startY: 0, boxX: 0, boxY: 0, boxW: 0, boxH: 0, containerW: 1, containerH: 1,
+        isDraggingKeyframe: false, originalTime: null, scrubStartTime: null
+    });
+
+    useEffect(() => {
+        const handleGlobalPointerDown = () => {
+            if (contextMenu) setContextMenu(null);
+        };
+        window.addEventListener('pointerdown', handleGlobalPointerDown);
+        return () => window.removeEventListener('pointerdown', handleGlobalPointerDown);
+    }, [contextMenu]);
+
+    useEffect(() => { if (modalClips.length === 0) onClose(); }, [modalClips]);
+
+    useEffect(() => {
+        if (videoRef.current && activeClip) {
+            videoRef.current.currentTime = activeClip.start;
+            setCurrentTime(activeClip.start);
+            setIsPlaying(false);
+            setSelectedKeyframes([]);
+            setContextMenu(null);
+        }
+    }, [activeClipId]);
+
+    useEffect(() => {
+        let animationFrameId;
+        const loop = () => {
+            if (videoRef.current && isPlaying && !isScrubbing && !dragStart.current.isDraggingKeyframe) {
+                const t = videoRef.current.currentTime;
+                setCurrentTime(t);
+
+                if (timelineContainerRef.current && activeClip) {
+                    const container = timelineContainerRef.current;
+                    const progress = (t - activeClip.start) / (activeClip.end - activeClip.start);
+                    const totalWidth = container.scrollWidth;
+                    const visibleWidth = container.clientWidth;
+                    const playheadX = progress * totalWidth;
+
+                    let targetScroll = playheadX - (visibleWidth / 2);
+                    if (targetScroll < 0) targetScroll = 0;
+                    if (targetScroll > totalWidth - visibleWidth) targetScroll = totalWidth - visibleWidth;
+
+                    container.scrollLeft = targetScroll;
+                }
+
+                if (activeClip && t >= activeClip.end) {
+                    videoRef.current.pause();
+                    videoRef.current.currentTime = activeClip.start;
+                    setIsPlaying(false);
+                } else {
+                    animationFrameId = requestAnimationFrame(loop);
+                }
+            }
+        };
+        if (isPlaying) animationFrameId = requestAnimationFrame(loop);
+        return () => { if(animationFrameId) cancelAnimationFrame(animationFrameId); };
+    }, [isPlaying, isScrubbing, activeClip]);
+
+    const deleteSelectedKeyframes = () => {
+        if (lockedClips.includes(activeClipId)) return;
+        if (selectedKeyframes.length === 0) return;
+
+        saveHistory();
+        setLocalCrops(prev => {
+            const cur = prev[activeClipId];
+            let newKfs = cur.keyframes.filter(k => !selectedKeyframes.some(st => Math.abs(k.time - st) < 0.05));
+            if (newKfs.length === 0) {
+                newKfs = [{ ...cur.keyframes[0], time: 0 }];
+            }
+            return { ...prev, [activeClipId]: { ...cur, keyframes: newKfs } };
+        });
+        setSelectedKeyframes([]);
+        setContextMenu(null);
+    };
+
+    const togglePlay = () => {
+        if (!videoRef.current) return;
+
+        if (videoRef.current.paused || !isPlaying) {
+            if (activeClip && videoRef.current.currentTime >= activeClip.end) {
+                videoRef.current.currentTime = activeClip.start;
+            }
+            const p = videoRef.current.play();
+            if (p !== undefined) p.catch(()=>{});
+            setIsPlaying(true);
+        }
+        else {
+            videoRef.current.pause();
+            setIsPlaying(false);
+        }
+    };
+
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+            if (e.code === 'KeyZ' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); handleUndo(); return; }
+            if (e.code === 'KeyX' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); handleRedo(); return; }
+
+            if (e.code === 'Space') {
+                e.preventDefault();
+                togglePlay();
+                return;
+            }
+
+            if (e.code === 'KeyQ' || e.code === 'ArrowLeft') { e.preventDefault(); stepFrame(false); }
+            if (e.code === 'KeyW' || e.code === 'ArrowRight') { e.preventDefault(); stepFrame(true); }
+            if (e.code === 'KeyA') { e.preventDefault(); stepTime(-1); }
+            if (e.code === 'KeyS') { e.preventDefault(); stepTime(1); }
+
+            if (e.code === 'KeyZ' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); jumpToEdge(true); }
+            if (e.code === 'KeyX' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); jumpToEdge(false); }
+            if (e.code === 'KeyE' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); toggleKeyframe(); }
+
+            if (e.code === 'Backspace' || e.code === 'Delete') {
+                if (selectedKeyframes.length > 0) {
+                    e.preventDefault();
+                    deleteSelectedKeyframes();
+                }
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [activeClipId, isPlaying, modalClips, activeClip, history, localCrops, currentTime, selectedKeyframes, isSmoothMode]);
+
+    const handleTimeUpdate = () => {
+        if (!videoRef.current || isScrubbing || dragStart.current.isDraggingKeyframe) return;
+        const t = videoRef.current.currentTime;
+        setCurrentTime(t);
+        if (activeClip && t >= activeClip.end && isPlaying) {
+            videoRef.current.pause();
+            videoRef.current.currentTime = activeClip.start;
+            setIsPlaying(false);
+        }
+    };
+
+    const handleLoadedMetadata = (e) => {
+        setDuration(e.target.duration);
+        setVideoAspect(e.target.videoWidth / e.target.videoHeight);
+    };
+
+    const toggleCheck = (id, e) => { e.stopPropagation(); setCheckedClips(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]); };
+    const toggleCheckAll = () => { setCheckedClips(prev => prev.length === modalClips.length ? [] : modalClips.map(c => c.id)); };
+
+    const toggleLockChecked = () => {
+        if (checkedClips.length === 0) return;
+        setLockedClips(prev => {
+            let newlyLocked = [...prev];
+            const allLocked = checkedClips.every(id => prev.includes(id));
+            if (allLocked) {
+                newlyLocked = newlyLocked.filter(id => !checkedClips.includes(id));
+            } else {
+                checkedClips.forEach(id => { if (!newlyLocked.includes(id)) newlyLocked.push(id); });
+            }
+            return newlyLocked;
+        });
+    };
+
+    const deleteCheckedClips = () => {
+        const remaining = modalClips.filter(c => !(checkedClips.includes(c.id) && !lockedClips.includes(c.id)));
+        setModalClips(remaining);
+        setCheckedClips(checkedClips.filter(id => lockedClips.includes(id)));
+        if (checkedClips.includes(activeClipId) && !lockedClips.includes(activeClipId) && remaining.length > 0) setActiveClipId(remaining[0].id);
+    };
+
+    const stepFrame = (forward) => {
+        const step = forward ? 0.01 : -0.01;
+        if (videoRef.current && activeClip) {
+            videoRef.current.pause();
+            setIsPlaying(false);
+
+            if (selectedKeyframes.length > 0 && !lockedClips.includes(activeClipId)) {
+                saveHistory();
+                let updatedTimes = [];
+
+                setLocalCrops(prev => {
+                    const cur = prev[activeClipId];
+                    let newKfs = [...cur.keyframes];
+
+                    selectedKeyframes.forEach(targetTime => {
+                        const targetIdx = newKfs.findIndex(k => Math.abs(k.time - targetTime) < 0.05);
+                        if (targetIdx >= 0) {
+                            let newTime = newKfs[targetIdx].time + step;
+                            if (newTime < activeClip.start) newTime = activeClip.start;
+                            if (newTime > activeClip.end) newTime = activeClip.end;
+                            newTime = parseFloat(newTime.toFixed(3));
+
+                            newKfs[targetIdx] = { ...newKfs[targetIdx], time: newTime };
+                            updatedTimes.push(newTime);
+                        }
+                    });
+
+                    newKfs.sort((a,b) => a.time - b.time);
+                    return { ...prev, [activeClipId]: { ...cur, keyframes: newKfs } };
+                });
+
+                setTimeout(() => {
+                    if (updatedTimes.length > 0) {
+                        setSelectedKeyframes(updatedTimes);
+                        if (videoRef.current) {
+                            videoRef.current.currentTime = updatedTimes[0];
+                        }
+                        setCurrentTime(updatedTimes[0]);
+                    }
+                }, 0);
+            } else {
+                let newTime = videoRef.current.currentTime + step;
+                if (newTime < activeClip.start) newTime = activeClip.start;
+                if (newTime > activeClip.end) newTime = activeClip.end;
+
+                videoRef.current.currentTime = newTime;
+                setCurrentTime(newTime);
+            }
+        }
+    };
+
+    const stepTime = (sec) => { if (videoRef.current) { videoRef.current.pause(); setIsPlaying(false); videoRef.current.currentTime += sec; setCurrentTime(videoRef.current.currentTime); } };
+    const jumpToEdge = (isStart) => { if (videoRef.current && activeClip) { videoRef.current.currentTime = isStart ? activeClip.start : activeClip.end; setCurrentTime(videoRef.current.currentTime); } };
+
+    const toggleTransition = () => {
+        const newMode = !isSmoothMode;
+        setIsSmoothMode(newMode);
+        saveHistory();
+
+        let snapTime = null;
+
+        setLocalCrops(prev => {
+            const currentClip = prev[activeClipId];
+            const tRound = parseFloat(currentTime.toFixed(2));
+            let newKfs = [...currentClip.keyframes];
+            let kfIdx = newKfs.findIndex(k => Math.abs(k.time - tRound) < 0.1);
+
+            if (kfIdx >= 0) {
+                newKfs[kfIdx] = { ...newKfs[kfIdx], transition: newMode ? 'smooth' : 'cut' };
+                snapTime = newKfs[kfIdx].time;
+            }
+
+            return { ...prev, [activeClipId]: { ...currentClip, keyframes: newKfs } };
+        });
+
+        setTimeout(() => {
+            if (snapTime !== null && videoRef.current) {
+                videoRef.current.currentTime = snapTime;
+                setCurrentTime(snapTime);
+            }
+        }, 0);
+    };
+
+    const getSlotRatio = (layout, frameCount, idx = 0) => {
+        const rp = 9 / 16;
+        let cols = 1; let rows = [1]; let rowIndex = 0; let colSpan = 1;
+
+        if (layout === '4-grid-2x2' || layout === 'grid-2x2') { cols = 2; rows = [1, 1]; rowIndex = Math.floor(idx/2); }
+        else if (layout === '6-grid-2x3' || layout === 'grid-2x3') { cols = 2; rows = [1, 1, 1]; rowIndex = Math.floor(idx/2); }
+        else if (layout === '6-grid-3x2' || layout === 'grid-3x2') { cols = 3; rows = [1, 1]; rowIndex = Math.floor(idx/3); }
+        else if (layout === '4-grid-1-2-1') {
+            cols = 2; rows = [9, 8, 9];
+            if (idx === 0) { rowIndex = 0; colSpan = 2; }
+            else if (idx === 1 || idx === 2) { rowIndex = 1; colSpan = 1; }
+            else { rowIndex = 2; colSpan = 2; }
+        }
+        else if (layout === '5-grid-1-2-2') {
+            cols = 2; rows = [9, 8, 8];
+            if (idx === 0) { rowIndex = 0; colSpan = 2; }
+            else if (idx === 1 || idx === 2) { rowIndex = 1; colSpan = 1; }
+            else { rowIndex = 2; colSpan = 1; }
+        }
+        else if (layout === '5-grid-2-1-2') {
+            cols = 2; rows = [8, 9, 8];
+            if (idx === 0 || idx === 1) { rowIndex = 0; colSpan = 1; }
+            else if (idx === 2) { rowIndex = 1; colSpan = 2; }
+            else { rowIndex = 2; colSpan = 1; }
+        }
+        else if (layout === '5-grid-2-2-1') {
+            cols = 2; rows = [8, 8, 9];
+            if (idx === 0 || idx === 1) { rowIndex = 0; colSpan = 1; }
+            else if (idx === 2 || idx === 3) { rowIndex = 1; colSpan = 1; }
+            else { rowIndex = 2; colSpan = 2; }
+        }
+        else if (layout === '3-grid-1-2') {
+            cols = 2; rows = [9, 7];
+            if (idx === 0) { rowIndex = 0; colSpan = 2; }
+            else { rowIndex = 1; colSpan = 1; }
+        }
+        else if (layout === '3-grid-2-1') {
+            cols = 2; rows = [7, 9];
+            if (idx === 2) { rowIndex = 1; colSpan = 2; }
+            else { rowIndex = 0; colSpan = 1; }
+        } else {
+            if (layout === '1-full') return rp;
+            if (layout === '1-square') return 1/1;
+            if (layout === '1-landscape') return 16/9;
+
+            if (layout === '2-stack') return rp * 2;
+            if (layout === '2-reaction-top') return idx === 0 ? 16/9 : 144/175;
+            if (layout === '2-reaction-bottom') return idx === 1 ? 16/9 : 144/175;
+
+            if (layout === '3-stack') return rp * 3;
+            if (layout === '4-stack' || layout === 'stack') return rp * frameCount;
+            if (layout === 'side') return rp / frameCount;
+
+            return rp;
+        }
+
+        const totalRows = rows.reduce((a, b) => a + b, 0);
+        const rowFr = rows[rowIndex];
+        const heightFraction = rowFr / totalRows;
+        const widthFraction = colSpan / cols;
+        return (widthFraction / heightFraction) * rp;
+    };
+
+    const setFrameCount = (num) => {
+        if(lockedClips.includes(activeClipId)) return;
+
+        if (videoRef.current && !videoRef.current.paused) {
+            videoRef.current.pause();
+            setIsPlaying(false);
+        }
+
+        saveHistory();
+
+        let snapTime = null;
+
+        setLocalCrops(prev => {
+            const currentClip = prev[activeClipId];
+            const tRound = parseFloat(currentTime.toFixed(2));
+            let newKfs = [...currentClip.keyframes];
+            let kfIdx = newKfs.findIndex(k => Math.abs(k.time - tRound) < 0.1);
+
+            let targetKf;
+            if (kfIdx >= 0) {
+                targetKf = { ...newKfs[kfIdx], transition: isSmoothMode ? 'smooth' : 'cut' };
+                snapTime = newKfs[kfIdx].time;
+            } else {
+                let base = newKfs[0];
+                for(let k of newKfs) if(tRound >= k.time) base = k;
+                targetKf = { ...base, time: tRound, transition: isSmoothMode ? 'smooth' : 'cut' };
+                newKfs.push(targetKf);
+                newKfs.sort((a,b) => a.time - b.time);
+                kfIdx = newKfs.indexOf(targetKf);
+                snapTime = tRound;
+            }
+
+            let defaultLayout = targetKf.layout;
+            if(num === 1) defaultLayout = '1-full';
+            else if(num === 2 && !['2-stack', '2-reaction-top', '2-reaction-bottom'].includes(defaultLayout)) defaultLayout = '2-stack';
+            else if(num === 3 && !['3-stack', '3-grid-1-2', '3-grid-2-1'].includes(defaultLayout)) defaultLayout = '3-stack';
+            else if(num === 4 && !['4-grid-2x2', '4-grid-1-2-1', '4-stack'].includes(defaultLayout)) defaultLayout = '4-grid-2x2';
+            else if(num === 5 && !['5-grid-1-2-2', '5-grid-2-1-2', '5-grid-2-2-1'].includes(defaultLayout)) defaultLayout = '5-grid-1-2-2';
+            else if(num === 6 && !['6-grid-2x3', '6-grid-3x2'].includes(defaultLayout)) defaultLayout = '6-grid-2x3';
+
+            let newBoxes = targetKf.boxes.slice(0, num).map((box, i) => {
+                const slotRatio = getSlotRatio(defaultLayout, num, i);
+                const b = {...box, ratio: slotRatio};
+                const pRatio = slotRatio / videoAspect;
+                b.h = b.w / pRatio;
+                if (b.y + b.h > 100) { b.y = 100 - b.h; if(b.y < 0) { b.y = 0; b.h = 100; b.w = b.h * pRatio; } }
+                if (b.x + b.w > 100) { b.x = 100 - b.w; if(b.x < 0) { b.x = 0; b.w = 100; b.h = b.w / pRatio; } }
+                return b;
+            });
+
+            if (num > newBoxes.length) {
+                for(let i = newBoxes.length; i < num; i++) {
+                    const slotRatio = getSlotRatio(defaultLayout, num, i);
+                    const pRatio = slotRatio / videoAspect;
+                    let defaultH = 100;
+                    let defaultW = defaultH * pRatio;
+                    if (defaultW > 100) { defaultW = 100; defaultH = defaultW / pRatio; }
+
+                    let defaultX = (100 - defaultW) / 2 + (i * 2);
+                    let defaultY = (100 - defaultH) / 2 + (i * 2);
+                    if (defaultX + defaultW > 100) defaultX = 100 - defaultW;
+                    if (defaultY + defaultH > 100) defaultY = 100 - defaultH;
+                    if (defaultX < 0) defaultX = 0;
+                    if (defaultY < 0) defaultY = 0;
+                    newBoxes.push({ x: defaultX, y: defaultY, w: defaultW, h: defaultH, ratio: slotRatio });
+                }
+            }
+
+            newKfs[kfIdx] = { ...targetKf, frameCount: num, layout: defaultLayout, boxes: newBoxes };
+            return { ...prev, [activeClipId]: { ...currentClip, keyframes: newKfs }};
+        });
+
+        setTimeout(() => {
+            if (snapTime !== null && videoRef.current) {
+                videoRef.current.currentTime = snapTime;
+                setCurrentTime(snapTime);
+            }
+        }, 0);
+    };
+
+    const setLayoutType = (type) => {
+        if(lockedClips.includes(activeClipId)) return;
+
+        if (videoRef.current && !videoRef.current.paused) {
+            videoRef.current.pause();
+            setIsPlaying(false);
+        }
+
+        saveHistory();
+
+        let snapTime = null;
+
+        setLocalCrops(prev => {
+            const currentClip = prev[activeClipId];
+            const tRound = parseFloat(currentTime.toFixed(2));
+            let newKfs = [...currentClip.keyframes];
+            let kfIdx = newKfs.findIndex(k => Math.abs(k.time - tRound) < 0.1);
+
+            let targetKf;
+            if (kfIdx >= 0) {
+                targetKf = { ...newKfs[kfIdx], transition: isSmoothMode ? 'smooth' : 'cut' };
+                snapTime = newKfs[kfIdx].time;
+            }
+            else {
+                let base = newKfs[0];
+                for(let k of newKfs) if(tRound >= k.time) base = k;
+                targetKf = { ...base, time: tRound, transition: isSmoothMode ? 'smooth' : 'cut' };
+                newKfs.push(targetKf);
+                newKfs.sort((a,b) => a.time - b.time);
+                kfIdx = newKfs.indexOf(targetKf);
+                snapTime = tRound;
+            }
+
+            const newBoxes = targetKf.boxes.map((box, idx) => {
+                const slotRatio = getSlotRatio(type, targetKf.frameCount, idx);
+                const b = {...box, ratio: slotRatio};
+                const pRatio = slotRatio / videoAspect;
+                b.h = b.w / pRatio;
+                if (b.y + b.h > 100) { b.y = 100 - b.h; if(b.y < 0) { b.y = 0; b.h = 100; b.w = b.h * pRatio; } }
+                if (b.x + b.w > 100) { b.x = 100 - b.w; if(b.x < 0) { b.x = 0; b.w = 100; b.h = b.w / pRatio; } }
+                return b;
+            });
+
+            newKfs[kfIdx] = { ...targetKf, layout: type, boxes: newBoxes };
+            return { ...prev, [activeClipId]: { ...currentClip, keyframes: newKfs } };
+        });
+
+        setTimeout(() => {
+            if (snapTime !== null && videoRef.current) {
+                videoRef.current.currentTime = snapTime;
+                setCurrentTime(snapTime);
+            }
+        }, 0);
+    };
+
+    const toggleKeyframe = () => {
+        if(lockedClips.includes(activeClipId)) return;
+
+        if (videoRef.current && !videoRef.current.paused) {
+            videoRef.current.pause();
+            setIsPlaying(false);
+        }
+
+        saveHistory();
+
+        let snapTime = null;
+
+        setLocalCrops(prev => {
+            const cur = prev[activeClipId];
+            let kfs = [...cur.keyframes];
+            const tRound = parseFloat(currentTime.toFixed(2));
+            const existsIdx = kfs.findIndex(k => Math.abs(k.time - tRound) < 0.1);
+
+            if (existsIdx >= 0) {
+                snapTime = kfs[existsIdx].time;
+                if (kfs.length > 1) kfs.splice(existsIdx, 1);
+            } else {
+                let base = kfs[0];
+                for(let k of kfs) if(tRound >= k.time) base = k;
+                kfs.push({ ...base, time: tRound, transition: isSmoothMode ? 'smooth' : 'cut' });
+                kfs.sort((a,b) => a.time - b.time);
+                snapTime = tRound;
+            }
+            return { ...prev, [activeClipId]: { ...cur, keyframes: kfs } };
+        });
+
+        setTimeout(() => {
+            if (snapTime !== null && videoRef.current) {
+                videoRef.current.currentTime = snapTime;
+                setCurrentTime(snapTime);
+            }
+        }, 0);
+    };
+
+    const handlePointerMove = (e) => {
+        if (dragStart.current.isDraggingKeyframe && timelineRef.current && activeClip) {
+            e.preventDefault();
+            const rect = timelineRef.current.getBoundingClientRect();
+            let percent = (e.clientX - rect.left) / rect.width;
+            percent = Math.max(0, Math.min(1, percent));
+            let newTime = activeClip.start + (percent * (activeClip.end - activeClip.start));
+            newTime = parseFloat(newTime.toFixed(2));
+
+            if (videoRef.current) videoRef.current.currentTime = newTime;
+            setCurrentTime(newTime);
+
+            setLocalCrops(prev => {
+                const currentClip = prev[activeClipId];
+                let newKfs = [...currentClip.keyframes];
+                const kfIdx = newKfs.findIndex(k => k.time === dragStart.current.originalTime);
+                if (kfIdx >= 0) {
+                    newKfs[kfIdx] = { ...newKfs[kfIdx], time: newTime };
+                    newKfs.sort((a,b) => a.time - b.time);
+                }
+                return { ...prev, [activeClipId]: { ...currentClip, keyframes: newKfs } };
+            });
+
+            dragStart.current.originalTime = newTime;
+            setSelectedKeyframes([newTime]);
+            return;
+        }
+
+        if (isScrubbing && timelineRef.current && activeClip) {
+            e.preventDefault();
+            const rect = timelineRef.current.getBoundingClientRect();
+            let percent = (e.clientX - rect.left) / rect.width;
+            percent = Math.max(0, Math.min(1, percent));
+            const newTime = activeClip.start + (percent * (activeClip.end - activeClip.start));
+            if(videoRef.current) videoRef.current.currentTime = newTime;
+            setCurrentTime(newTime);
+
+            if (dragStart.current.scrubStartTime !== null) {
+                const rangeMin = Math.min(dragStart.current.scrubStartTime, newTime);
+                const rangeMax = Math.max(dragStart.current.scrubStartTime, newTime);
+                const kfs = localCrops[activeClipId]?.keyframes || [];
+                const selected = kfs.filter(k => k.time >= rangeMin - 0.05 && k.time <= rangeMax + 0.05).map(k => k.time);
+                setSelectedKeyframes(selected);
+            }
+            return;
+        }
+
+        const isDragging = dragStart.current.isDragging;
+        const handle = dragStart.current.handle;
+
+        if (!isDragging && !handle) return;
+        if (e.cancelable) e.preventDefault();
+
+        const clientX = e.clientX !== undefined ? e.clientX : e.touches?.[0]?.clientX ?? 0;
+        const clientY = e.clientY !== undefined ? e.clientY : e.touches?.[0]?.clientY ?? 0;
+
+        const bIndex = dragStart.current.boxIndex;
+        if (bIndex === null || bIndex === undefined) return;
+
+        const containerW = dragStart.current.containerW || 1;
+        const containerH = dragStart.current.containerH || 1;
+        const deltaX = ((clientX - dragStart.current.startX) / containerW) * 100;
+        const deltaY = ((clientY - dragStart.current.startY) / containerH) * 100;
+
+        let { boxX: newX, boxY: newY, boxW: newW, boxH: newH } = dragStart.current;
+        const targetAspect = activeData.boxes[bIndex]?.ratio || 9/16;
+        let pRatio = targetAspect / videoAspect;
+
+        if (isDragging) {
+            newX += deltaX; newY += deltaY;
+            if (newX < 0) newX = 0; if (newY < 0) newY = 0;
+            if (newX + newW > 100) newX = 100 - newW; if (newY + newH > 100) newY = 100 - newH;
+        } else if (handle) {
+            let tempW = newW; let tempH = newH; let tempX = newX; let tempY = newY;
+
+            if (handle.includes('e')) { tempW += deltaX; }
+            if (handle.includes('w')) { tempW -= deltaX; tempX += deltaX; }
+
+            if (tempW < 5) { tempW = 5; if (handle.includes('w')) tempX = dragStart.current.boxX + dragStart.current.boxW - 5; }
+            tempH = tempW / pRatio;
+
+            if (handle.includes('n')) { tempY = dragStart.current.boxY + dragStart.current.boxH - tempH; }
+            else if (!handle.includes('s')) { tempY = dragStart.current.boxY + (dragStart.current.boxH - tempH) / 2; }
+
+            if (tempX < 0) {
+                tempX = 0; tempW = dragStart.current.boxW + dragStart.current.boxX; tempH = tempW / pRatio;
+                if (handle.includes('n')) tempY = dragStart.current.boxY + dragStart.current.boxH - tempH;
+                else if (!handle.includes('s')) tempY = dragStart.current.boxY + (dragStart.current.boxH - tempH) / 2;
+            }
+            if (tempX + tempW > 100) {
+                tempW = 100 - tempX; tempH = tempW / pRatio;
+                if (handle.includes('n')) tempY = dragStart.current.boxY + dragStart.current.boxH - tempH;
+                else if (!handle.includes('s')) tempY = dragStart.current.boxY + (dragStart.current.boxH - tempH) / 2;
+            }
+            if (tempY < 0) {
+                tempY = 0; tempH = dragStart.current.boxH + dragStart.current.boxY; tempW = tempH * pRatio;
+                if (handle.includes('w')) tempX = dragStart.current.boxX + dragStart.current.boxW - tempW;
+                else if (!handle.includes('e')) tempX = dragStart.current.boxX + (dragStart.current.boxW - tempW) / 2;
+            }
+            if (tempY + tempH > 100) {
+                tempH = 100 - tempY; tempW = tempH * pRatio;
+                if (handle.includes('w')) tempX = dragStart.current.boxX + dragStart.current.boxW - tempW;
+                else if (!handle.includes('e')) tempX = dragStart.current.boxX + (dragStart.current.boxW - tempW) / 2;
+            }
+            newW = tempW; newH = tempH; newX = tempX; newY = tempY;
+        }
+
+        setLocalCrops(prev => {
+            const currentClip = prev[activeClipId];
+            const tRound = parseFloat(currentTime.toFixed(2));
+            let newKfs = [...currentClip.keyframes];
+            let kfIdx = newKfs.findIndex(k => Math.abs(k.time - tRound) < 0.1);
+
+            let targetKf;
+            if (kfIdx >= 0) {
+                targetKf = { ...newKfs[kfIdx], transition: isSmoothMode ? 'smooth' : 'cut' };
+            } else {
+                let base = newKfs[0];
+                for(let k of newKfs) if(tRound >= k.time) base = k;
+                targetKf = { ...base, time: tRound, transition: isSmoothMode ? 'smooth' : 'cut' };
+                newKfs.push(targetKf);
+                newKfs.sort((a,b) => a.time - b.time);
+                kfIdx = newKfs.indexOf(targetKf);
+            }
+
+            const newBoxes = [...targetKf.boxes];
+            newBoxes[bIndex] = { ...newBoxes[bIndex], x: newX, y: newY, w: newW, h: newH };
+            newKfs[kfIdx] = { ...targetKf, boxes: newBoxes };
+
+            return { ...prev, [activeClipId]: { ...currentClip, keyframes: newKfs } };
+        });
+    };
+
+    const handlePointerDown = (e, boxIndex, handle = null) => {
+        e.preventDefault(); e.stopPropagation();
+        if (lockedClips.includes(activeClipId)) return;
+
+        if (videoRef.current && !videoRef.current.paused) {
+            videoRef.current.pause();
+            setIsPlaying(false);
+        }
+
+        saveHistory();
+
+        const rect = containerRef.current.getBoundingClientRect();
+        const clientX = e.clientX !== undefined ? e.clientX : e.touches?.[0]?.clientX ?? 0;
+        const clientY = e.clientY !== undefined ? e.clientY : e.touches?.[0]?.clientY ?? 0;
+
+        setActiveBoxIndex(boxIndex);
+        const targetBox = activeData.boxes[boxIndex];
+
+        dragStart.current = {
+            ...dragStart.current,
+            isDragging: !handle, handle: handle, boxIndex: boxIndex,
+            startX: clientX, startY: clientY, boxX: targetBox.x, boxY: targetBox.y, boxW: targetBox.w, boxH: targetBox.h,
+            containerW: rect.width || 1, containerH: rect.height || 1
+        };
+    };
+
+    const handlePointerUp = () => {
+        dragStart.current.isDragging = false;
+        dragStart.current.handle = null;
+        dragStart.current.boxIndex = null;
+        dragStart.current.isDraggingKeyframe = false;
+        dragStart.current.originalTime = null;
+        dragStart.current.scrubStartTime = null;
+        setActiveBoxIndex(null);
+        setIsScrubbing(false);
+    };
+
+    const handleTimelinePointerDown = (e) => {
+        e.preventDefault();
+
+        if (videoRef.current && !videoRef.current.paused) {
+            videoRef.current.pause();
+            setIsPlaying(false);
+        }
+
+        setIsScrubbing(true);
+        setSelectedKeyframes([]);
+        if (contextMenu) setContextMenu(null);
+
+        if (!timelineRef.current || !videoRef.current || !activeClip) return;
+        const rect = timelineRef.current.getBoundingClientRect();
+        let percent = (e.clientX - rect.left) / rect.width;
+        percent = Math.max(0, Math.min(1, percent));
+        const newTime = activeClip.start + (percent * (activeClip.end - activeClip.start));
+
+        videoRef.current.currentTime = newTime;
+        setCurrentTime(newTime);
+
+        dragStart.current.scrubStartTime = newTime;
+    };
+
+    const formatMs = (sec) => { if(isNaN(sec)) return "0:00"; const m = Math.floor(sec/60); const s = Math.floor(sec%60); return `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`; };
+
+    const memoizedThumbnails = React.useMemo(() => {
+        if (!duration || !activeClip) return null;
+        const thumbsCount = Math.max(10, Math.floor(10 * timelineZoom));
+        return (
+            <div className="absolute inset-x-0 top-6 bottom-0 flex opacity-60 pointer-events-none">
+                {Array.from({length: thumbsCount}).map((_, i) => {
+                    const tTime = activeClip.start + ((activeClip.end - activeClip.start) / thumbsCount) * i;
+                    return (
+                        <div key={`${activeClip.id}-${i}`} className="flex-1 h-full border-r border-white/5 overflow-hidden relative">
+                            <video src={videoUrl} onLoadedData={e => { e.target.currentTime = tTime; }} className="w-full h-full object-cover" preload="auto" muted playsInline />
+                        </div>
+                    )
+                })}
+            </div>
+        );
+    }, [activeClip?.id, videoUrl, duration, timelineZoom]);
+
+    if(!activeClip) return null;
+
+    const clipCurrent = Math.max(0, currentTime - activeClip.start);
+    const clipTotal = Math.max(0.1, activeClip.end - activeClip.start);
+    const progressPct = Math.min(100, (clipCurrent / clipTotal) * 100);
+
+    const currentKfIdx = activeKeyframes.findIndex(k => Math.abs(k.time - currentTime) < 0.1);
+    const hasKeyframeHere = currentKfIdx >= 0;
+
+    const getContainerClass = (layout) => {
+        if (layout === 'side') return 'flex flex-row w-full h-full';
+
+        if (layout === '4-grid-2x2' || layout === 'grid-2x2') return 'grid grid-cols-2 grid-rows-2 w-full h-full';
+        if (layout === '4-grid-1-2-1') return 'grid grid-cols-2 grid-rows-[9fr_8fr_9fr] w-full h-full';
+
+        if (layout === '5-grid-1-2-2') return 'grid grid-cols-2 grid-rows-[9fr_8fr_8fr] w-full h-full';
+        if (layout === '5-grid-2-1-2') return 'grid grid-cols-2 grid-rows-[8fr_9fr_8fr] w-full h-full';
+        if (layout === '5-grid-2-2-1') return 'grid grid-cols-2 grid-rows-[8fr_8fr_9fr] w-full h-full';
+
+        if (layout === '6-grid-2x3' || layout === 'grid-2x3') return 'grid grid-cols-2 grid-rows-3 w-full h-full';
+        if (layout === '6-grid-3x2' || layout === 'grid-3x2') return 'grid grid-cols-3 grid-rows-2 w-full h-full';
+
+        if (layout === '3-grid-1-2') return 'grid grid-cols-2 grid-rows-[9fr_7fr] w-full h-full';
+        if (layout === '3-grid-2-1') return 'grid grid-cols-2 grid-rows-[7fr_9fr] w-full h-full';
+
+        return 'flex flex-col w-full h-full';
+    };
+
+    const getItemClass = (layout, idx) => {
+        let base = "relative flex items-center justify-center bg-transparent overflow-hidden";
+
+        if (layout === 'stack' || layout === '1-full' || layout === '2-stack' || layout === '3-stack' || layout === '4-stack') {
+            return `${base} flex-1`;
+        }
+        if (layout === '1-square' || layout === '1-landscape' || layout === 'side') {
+            return `${base} flex-1`;
+        }
+
+        if (layout === '2-reaction-top') return `${base} ${idx === 0 ? 'w-full h-[31.640625%]' : 'flex-1 w-full'}`;
+        if (layout === '2-reaction-bottom') return `${base} ${idx === 1 ? 'w-full h-[31.640625%]' : 'flex-1 w-full'}`;
+
+        if (layout === '3-grid-1-2') return `${base} ${idx === 0 ? 'col-span-2' : 'w-full h-full'}`;
+        if (layout === '3-grid-2-1') return `${base} ${idx === 2 ? 'col-span-2' : 'w-full h-full'}`;
+
+        if (layout === '4-grid-1-2-1') return `${base} ${idx === 0 || idx === 3 ? 'col-span-2' : 'w-full h-full'}`;
+
+        if (layout === '5-grid-1-2-2') return `${base} ${idx === 0 ? 'col-span-2' : 'w-full h-full'}`;
+        if (layout === '5-grid-2-1-2') return `${base} ${idx === 2 ? 'col-span-2' : 'w-full h-full'}`;
+        if (layout === '5-grid-2-2-1') return `${base} ${idx === 4 ? 'col-span-2' : 'w-full h-full'}`;
+
+        return `${base} w-full h-full`;
+    };
+
+    return (
+        <div className="fixed inset-0 z-[11000] bg-zinc-800 flex flex-row font-sans touch-none select-none text-zinc-200" onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerLeave={handlePointerUp}>
+
+            {/* PANEL KIRI: DAFTAR KLIP DAN TOMBOL BATCH */}
+            <div className="w-[240px] flex flex-col z-20 shrink-0 bg-zinc-800 border-r border-zinc-700/50 h-full relative shadow-[5px_0_15px_rgba(0,0,0,0.2)]">
+                <div className="h-[60px] border-b border-zinc-700/50 flex justify-between items-center px-5 shrink-0">
+                    <span className="text-[11px] font-black uppercase tracking-widest text-amber-500 flex items-center gap-2"><List size={16}/> List Clip</span>
+                    <button onClick={onClose} className="p-2 text-zinc-400 hover:text-red-400 hover:bg-zinc-700/50 rounded-lg transition-all"><X size={15}/></button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2.5 custom-scrollbar bg-zinc-800/30">
+                    {modalClips.map((c, i) => {
+                        const isAct = activeClipId === c.id;
+                        const isApplied = localCrops[c.id]?.isApplied;
+                        const isChecked = checkedClips.includes(c.id);
+                        const isLocked = lockedClips.includes(c.id);
+                        return (
+                        <div key={c.id} onClick={() => setActiveClipId(c.id)} className={`p-2.5 rounded-xl cursor-pointer flex items-center gap-2.5 group transition-all ${isAct ? 'bg-amber-500/15 border border-amber-500/30 shadow-inner' : 'bg-zinc-700/30 border border-transparent hover:bg-zinc-700/50'}`}>
+                            <div onClick={(e) => toggleCheck(c.id, e)} className={`w-4 h-4 rounded-md flex items-center justify-center shrink-0 transition-colors ${isChecked ? 'bg-amber-500 text-zinc-900' : 'bg-black/30 text-transparent group-hover:bg-black/50 border border-zinc-600/50'}`}>
+                                <Check size={12} className="fill-current stroke-[3]" />
+                            </div>
+                            <div className="flex flex-col flex-1 overflow-hidden min-w-0">
+                                <span className={`text-[10px] font-bold truncate ${isAct ? 'text-amber-400' : 'text-zinc-300'}`}>{i+1}. {c.name}</span>
+                            </div>
+                            {isLocked && <div title="Terkunci"><IconLock className="text-red-400 shrink-0 mx-0.5" /></div>}
+                            {isApplied && !isLocked && <Link size={12} className="text-blue-400 shrink-0 mx-0.5" />}
+                            {isAct && <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse shrink-0"></div>}
+                        </div>
+                    )})}
+                </div>
+
+                <div className="p-4 border-t border-zinc-700/50 bg-zinc-800 shrink-0 flex flex-col gap-3">
+                    <div className="flex items-center gap-2">
+                        <button onClick={toggleCheckAll} className="flex-1 text-[10px] font-bold text-zinc-300 flex items-center justify-center gap-1.5 hover:text-white transition-colors bg-zinc-700/40 py-2.5 rounded-xl border border-zinc-600/50 active:scale-95">
+                            {checkedClips.length === modalClips.length && modalClips.length > 0 ? <CheckSquare size={13} className="text-amber-500" /> : <Square size={13}/>} All
+                        </button>
+                        <button onClick={toggleLockChecked} disabled={checkedClips.length === 0} className="flex-1 text-[10px] font-bold text-zinc-300 flex items-center justify-center gap-1.5 hover:text-white disabled:opacity-30 transition-colors bg-zinc-700/40 py-2.5 rounded-xl border border-zinc-600/50 active:scale-95">
+                            {checkedClips.length > 0 && checkedClips.every(id => lockedClips.includes(id)) ? <IconLock className="text-red-400" /> : <IconUnlock />} Lock
+                        </button>
+                        <button onClick={deleteCheckedClips} disabled={checkedClips.length === 0} className="flex-1 text-[10px] font-bold text-red-400 hover:text-white bg-red-900/20 hover:bg-red-500/80 disabled:opacity-30 border border-red-900/30 transition-all py-2.5 rounded-xl active:scale-95 flex items-center justify-center gap-1.5">
+                            <Trash2 size={12}/> Del
+                        </button>
+                    </div>
+                    <button
+                        onClick={() => {
+                            const exports = {};
+                            checkedClips.forEach(id => exports[id] = localCrops[id]);
+                            onSaveAll(exports);
+                        }}
+                        disabled={checkedClips.length === 0}
+                        className={`w-full py-3.5 mt-1 text-[11px] font-black tracking-widest uppercase rounded-xl flex items-center justify-center gap-2 transition-all ${checkedClips.length === 0 ? 'bg-zinc-700 text-zinc-500 border border-zinc-600/50 cursor-not-allowed' : 'bg-amber-500 hover:bg-amber-400 text-zinc-900 shadow-[0_5px_15px_rgba(245,158,11,0.3)] active:scale-95'}`}
+                    >
+                        <Download size={16} className="stroke-[3]" /> Ekspor ({checkedClips.length})
+                    </button>
+                </div>
+            </div>
+
+            <div className="flex-1 flex flex-col min-w-0 bg-zinc-900/80 relative">
+
+                <div className="flex-1 relative flex items-center justify-center p-6 overflow-hidden bg-transparent min-w-0 min-h-0">
+                    <div className="relative flex items-center justify-center rounded-lg shadow-[0_10px_50px_rgba(0,0,0,0.6)]"
+                        ref={containerRef}
+                        style={{
+                            aspectRatio: videoAspect,
+                            maxHeight: '100%',
+                            maxWidth: '100%',
+                            height: videoAspect < 1 ? '100%' : 'auto',
+                            width: videoAspect >= 1 ? '100%' : 'auto',
+                            flexShrink: 0
+                        }}>
+                        <video ref={videoRef} src={videoUrl} onLoadedMetadata={handleLoadedMetadata} onTimeUpdate={handleTimeUpdate} className="absolute inset-0 w-full h-full pointer-events-none rounded-lg" style={{ objectFit: 'fill' }} />
+                        <div className="absolute inset-0 z-10 pointer-events-none">
+                            {activeData.boxes.map((box, idx) => (
+                                <CropBox key={idx} boxData={box} boxIndex={idx} frameCount={activeData.frameCount} isSmoothModeActive={isSmoothMode} activeBoxIndex={activeBoxIndex} handlePointerDown={handlePointerDown} />
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                <div className="h-[64px] border-y border-zinc-700/50 bg-zinc-800 shadow-sm relative z-40 flex items-center justify-start px-6 gap-4 overflow-x-auto custom-scrollbar">
+
+                    <BtnGroup>
+                        <Btn onClick={handleUndo} disabled={!(history[activeClipId]?.past?.length > 0) || lockedClips.includes(activeClipId)} icon={<IconUndo />} title="Undo [Ctrl+Z]" />
+                        <Btn onClick={handleRedo} disabled={!(history[activeClipId]?.future?.length > 0) || lockedClips.includes(activeClipId)} icon={<IconRedo />} title="Redo [Ctrl+X]" />
+                    </BtnGroup>
+
+                    <BtnGroup>
+                        <Btn onClick={() => jumpToEdge(true)} icon={<SkipBack size={13}/>} title="Ke Awal [Z]" />
+                        <Btn onClick={() => stepTime(-1)} icon={<Rewind size={13}/>} title="Mundur 1 Detik [A]" />
+                        <Btn onClick={togglePlay} isActive={isPlaying} icon={isPlaying ? <Pause size={13} className="fill-current" /> : <Play size={13} className="fill-current" />} title="Putar/Jeda [SPASI]" />
+                        <Btn onClick={() => stepTime(1)} icon={<FastForward size={13}/>} title="Maju 1 Detik [S]" />
+                        <Btn onClick={() => jumpToEdge(false)} icon={<SkipForward size={13}/>} title="Ke Akhir [X]" />
+                    </BtnGroup>
+
+                    <BtnGroup>
+                        <Btn onClick={toggleKeyframe} isActive={hasKeyframeHere} activeColor={isSmoothMode ? 'blue' : 'amber'} icon={<div className="w-2.5 h-2.5 border-[1.5px] border-current rotate-45 flex items-center justify-center"><div className={`w-0.5 h-0.5 rounded-full ${hasKeyframeHere ? 'bg-current' : ''}`}></div></div>} title="Tandai Keyframe [E]" />
+                        <div className="relative flex items-center justify-center">
+                            <Btn
+                                onClick={toggleTransition}
+                                isActive={isSmoothMode}
+                                activeColor="blue"
+                                icon={<IconTransition />}
+                                title="Mode Transisi Halus & Stabilizer (Klik untuk Toggle)"
+                            />
+                        </div>
+                    </BtnGroup>
+
+                    <BtnGroup>
+                        {[1, 2, 3, 4, 5, 6].map(n => (
+                            <Btn key={n} onClick={() => setFrameCount(n)} isActive={activeData.frameCount === n} icon={<span className="text-[14px] font-black">{n}</span>} title={`Set ${n} Box`} />
+                        ))}
+                    </BtnGroup>
+
+                    {activeData.frameCount === 1 && (
+                        <BtnGroup>
+                            <Btn onClick={()=>setLayoutType('1-full')} isActive={activeData.layout === '1-full' || activeData.layout === 'stack'} icon={<div className="w-3 h-4 bg-current rounded-[1.5px]"></div>} title="Portrait Full" />
+                            <Btn onClick={()=>setLayoutType('1-square')} isActive={activeData.layout === '1-square'} icon={<div className="w-3.5 h-3.5 bg-current rounded-[1.5px]"></div>} title="Square Center" />
+                            <Btn onClick={()=>setLayoutType('1-landscape')} isActive={activeData.layout === '1-landscape'} icon={<div className="w-4 h-2.5 bg-current rounded-[1.5px]"></div>} title="Landscape Center" />
+                        </BtnGroup>
+                    )}
+
+                    {activeData.frameCount === 2 && (
+                        <BtnGroup>
+                            <Btn onClick={()=>setLayoutType('2-stack')} isActive={activeData.layout === '2-stack' || activeData.layout === 'stack'} icon={<div className="w-3.5 h-3.5 flex flex-col gap-[1.5px]"><div className="flex-1 bg-current rounded-[1.5px]"></div><div className="flex-1 bg-current rounded-[1.5px]"></div></div>} title="Stack Atas Bawah" />
+                            <Btn onClick={()=>setLayoutType('2-reaction-top')} isActive={activeData.layout === '2-reaction-top'} icon={<div className="w-3.5 h-3.5 flex flex-col gap-[1.5px]"><div className="w-full h-1.5 bg-current rounded-[1.5px]"></div><div className="flex-1 bg-current rounded-[1.5px]"></div></div>} title="Landscape Atas" />
+                            <Btn onClick={()=>setLayoutType('2-reaction-bottom')} isActive={activeData.layout === '2-reaction-bottom'} icon={<div className="w-3.5 h-3.5 flex flex-col gap-[1.5px]"><div className="flex-1 bg-current rounded-[1.5px]"></div><div className="w-full h-1.5 bg-current rounded-[1.5px]"></div></div>} title="Landscape Bawah" />
+                        </BtnGroup>
+                    )}
+
+                    {activeData.frameCount === 3 && (
+                        <BtnGroup>
+                            <Btn onClick={()=>setLayoutType('3-stack')} isActive={activeData.layout === '3-stack' || activeData.layout === 'stack'} icon={<div className="w-3.5 h-3.5 flex flex-col gap-[1px]"><div className="flex-1 bg-current rounded-[1px]"></div><div className="flex-1 bg-current rounded-[1px]"></div><div className="flex-1 bg-current rounded-[1px]"></div></div>} title="3 Landscape Susun" />
+                            <Btn onClick={()=>setLayoutType('3-grid-1-2')} isActive={activeData.layout === '3-grid-1-2'} icon={<div className="w-3.5 h-3.5 flex flex-col gap-[1.5px]"><div className="w-full h-[50%] bg-current rounded-[1px]"></div><div className="w-full flex-1 flex gap-[1.5px]"><div className="flex-1 bg-current rounded-[1px]"></div><div className="flex-1 bg-current rounded-[1px]"></div></div></div>} title="Persegi 1 Atas, 2 Bawah" />
+                            <Btn onClick={()=>setLayoutType('3-grid-2-1')} isActive={activeData.layout === '3-grid-2-1'} icon={<div className="w-3.5 h-3.5 flex flex-col gap-[1.5px]"><div className="w-full flex-1 flex gap-[1.5px]"><div className="flex-1 bg-current rounded-[1px]"></div><div className="flex-1 bg-current rounded-[1px]"></div></div><div className="w-full h-[50%] bg-current rounded-[1px]"></div></div>} title="Persegi 2 Atas, 1 Bawah" />
+                        </BtnGroup>
+                    )}
+
+                    {activeData.frameCount === 4 && (
+                        <BtnGroup>
+                            <Btn onClick={()=>setLayoutType('4-grid-2x2')} isActive={activeData.layout === '4-grid-2x2' || activeData.layout === 'grid-2x2'} icon={<div className="w-4 h-4 grid grid-cols-2 grid-rows-2 gap-[1px]"><div className="bg-current rounded-[1px]"></div><div className="bg-current rounded-[1px]"></div><div className="bg-current rounded-[1px]"></div><div className="bg-current rounded-[1px]"></div></div>} title="2 Atas, 2 Bawah" />
+                            <Btn onClick={()=>setLayoutType('4-grid-1-2-1')} isActive={activeData.layout === '4-grid-1-2-1'} icon={<div className="w-3.5 h-4 flex flex-col gap-[1.5px]"><div className="w-full h-[25%] bg-current rounded-[1px]"></div><div className="w-full flex-1 flex gap-[1.5px]"><div className="flex-1 bg-current rounded-[1px]"></div><div className="flex-1 bg-current rounded-[1px]"></div></div><div className="w-full h-[25%] bg-current rounded-[1px]"></div></div>} title="1 Atas, 2 Tengah, 1 Bawah" />
+                            <Btn onClick={()=>setLayoutType('4-stack')} isActive={activeData.layout === '4-stack' || activeData.layout === 'stack'} icon={<div className="w-3.5 h-4 flex flex-col gap-[1px]"><div className="flex-1 bg-current rounded-[1px]"></div><div className="flex-1 bg-current rounded-[1px]"></div><div className="flex-1 bg-current rounded-[1px]"></div><div className="flex-1 bg-current rounded-[1px]"></div></div>} title="4 Susun" />
+                        </BtnGroup>
+                    )}
+
+                    {activeData.frameCount === 5 && (
+                        <BtnGroup>
+                            <Btn onClick={()=>setLayoutType('5-grid-1-2-2')} isActive={activeData.layout === '5-grid-1-2-2'} icon={<div className="w-3.5 h-4 flex flex-col gap-[1.5px]"><div className="w-full h-[20%] bg-current rounded-[1px]"></div><div className="w-full flex-1 flex gap-[1.5px]"><div className="flex-1 bg-current rounded-[1px]"></div><div className="flex-1 bg-current rounded-[1px]"></div></div><div className="w-full flex-1 flex gap-[1.5px]"><div className="flex-1 bg-current rounded-[1px]"></div><div className="flex-1 bg-current rounded-[1px]"></div></div></div>} title="1 Atas, 2 Tengah, 2 Bawah" />
+                            <Btn onClick={()=>setLayoutType('5-grid-2-1-2')} isActive={activeData.layout === '5-grid-2-1-2'} icon={<div className="w-3.5 h-4 flex flex-col gap-[1.5px]"><div className="w-full flex-1 flex gap-[1.5px]"><div className="flex-1 bg-current rounded-[1px]"></div><div className="flex-1 bg-current rounded-[1px]"></div></div><div className="w-full h-[20%] bg-current rounded-[1px]"></div><div className="w-full flex-1 flex gap-[1.5px]"><div className="flex-1 bg-current rounded-[1px]"></div><div className="flex-1 bg-current rounded-[1px]"></div></div></div>} title="2 Atas, 1 Tengah, 2 Bawah" />
+                            <Btn onClick={()=>setLayoutType('5-grid-2-2-1')} isActive={activeData.layout === '5-grid-2-2-1'} icon={<div className="w-3.5 h-4 flex flex-col gap-[1.5px]"><div className="w-full flex-1 flex gap-[1.5px]"><div className="flex-1 bg-current rounded-[1px]"></div><div className="flex-1 bg-current rounded-[1px]"></div></div><div className="w-full flex-1 flex gap-[1.5px]"><div className="flex-1 bg-current rounded-[1px]"></div><div className="flex-1 bg-current rounded-[1px]"></div></div><div className="w-full h-[20%] bg-current rounded-[1px]"></div></div>} title="2 Atas, 2 Tengah, 1 Bawah" />
+                        </BtnGroup>
+                    )}
+
+                    {activeData.frameCount >= 6 && (
+                        <BtnGroup>
+                            <Btn onClick={()=>setLayoutType('6-grid-2x3')} isActive={activeData.layout === '6-grid-2x3' || activeData.layout === 'grid-2x3'} icon={<div className="w-4 h-4 grid grid-cols-2 grid-rows-3 gap-[1px]"><div className="bg-current rounded-[1px]"></div><div className="bg-current rounded-[1px]"></div><div className="bg-current rounded-[1px]"></div><div className="bg-current rounded-[1px]"></div><div className="bg-current rounded-[1px]"></div><div className="bg-current rounded-[1px]"></div></div>} title="2 Atas, 2 Tengah, 2 Bawah" />
+                            <Btn onClick={()=>setLayoutType('6-grid-3x2')} isActive={activeData.layout === '6-grid-3x2' || activeData.layout === 'grid-3x2'} icon={<div className="w-4 h-4 grid grid-cols-3 grid-rows-2 gap-[1px]"><div className="bg-current rounded-[1px]"></div><div className="bg-current rounded-[1px]"></div><div className="bg-current rounded-[1px]"></div><div className="bg-current rounded-[1px]"></div><div className="bg-current rounded-[1px]"></div><div className="bg-current rounded-[1px]"></div></div>} title="3 Atas, 3 Bawah" />
+                        </BtnGroup>
+                    )}
+                </div>
+
+                <div className="h-32 flex flex-col relative overflow-hidden bg-zinc-900/80 shrink-0">
+
+                    {/* Floating Info & Zoom Controls */}
+                    <div className="absolute top-0 left-0 right-0 z-50 flex justify-between items-start pointer-events-none px-2 py-1">
+                        <div className="px-2 py-1 pointer-events-auto mt-1">
+                            <span className="text-[10px] font-mono font-bold text-amber-500 drop-shadow-[0_0_5px_rgba(245,158,11,0.5)]">
+                                {formatMs(currentTime - activeClip.start)} <span className="text-zinc-500 ml-1">/ {formatMs(activeClip.end - activeClip.start)}</span>
+                            </span>
+                        </div>
+                        <div className="flex gap-1 pointer-events-auto mt-1">
+                            <button onClick={() => setTimelineZoom(z => Math.max(1, z - 0.5))} className="bg-zinc-800 hover:bg-zinc-700 text-white rounded-md p-1.5 shadow-sm border border-zinc-700/50 transition-colors" title="Perkecil Timeline (Zoom Out)">
+                                <IconZoomOut />
+                            </button>
+                            <button onClick={() => setTimelineZoom(z => Math.min(10, z + 0.5))} className="bg-zinc-800 hover:bg-zinc-700 text-white rounded-md p-1.5 shadow-sm border border-zinc-700/50 transition-colors" title="Perbesar Timeline (Zoom In)">
+                                <IconZoomIn />
+                            </button>
+                        </div>
+                    </div>
+
+                    <div ref={timelineContainerRef} className="w-full h-full overflow-x-auto overflow-y-hidden custom-scrollbar relative">
+                        <div ref={timelineRef} onPointerDown={handleTimelinePointerDown} className="h-full relative cursor-pointer group" style={{ width: `${timelineZoom * 100}%`, minWidth: '100%' }}>
+
+                            {memoizedThumbnails}
+
+                            <div className="absolute top-0 left-0 right-0 h-6 bg-gradient-to-b from-zinc-900 to-transparent flex justify-between items-start px-2 pt-1 pointer-events-none z-30 border-b border-zinc-700/50">
+                                <div className="absolute inset-x-0 top-0 h-full flex justify-between items-start opacity-30">
+                                    {Array.from({length: Math.max(50, Math.floor(50 * timelineZoom))}).map((_, i) => (
+                                        <div key={i} className={`w-px ${i%10===0 ? 'h-2.5 bg-white' : 'h-1.5 bg-zinc-400'}`}></div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {isScrubbing && dragStart.current.scrubStartTime !== null && (
+                                <div className="absolute top-0 bottom-0 bg-blue-500/20 border-x border-blue-400/50 pointer-events-none z-20"
+                                     style={{
+                                         left: `${Math.min(((dragStart.current.scrubStartTime - activeClip.start) / (activeClip.end - activeClip.start)) * 100, ((currentTime - activeClip.start) / (activeClip.end - activeClip.start)) * 100)}%`,
+                                         width: `${Math.abs(((currentTime - activeClip.start) / (activeClip.end - activeClip.start)) * 100 - ((dragStart.current.scrubStartTime - activeClip.start) / (activeClip.end - activeClip.start)) * 100)}%`
+                                     }}>
+                                </div>
+                            )}
+
+                            <div className="absolute top-0 bottom-0 w-[2px] bg-red-500 z-40 pointer-events-none shadow-[0_0_10px_#ef4444]" style={{ left: `${((currentTime - activeClip.start) / (activeClip.end - activeClip.start)) * 100 || 0}%` }}>
+                                <div className="absolute top-0 -left-1 w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[6px] border-t-red-500"></div>
+                                <div className="absolute bottom-0 -left-1 w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-b-[6px] border-b-red-500"></div>
+                            </div>
+
+                            {activeKeyframes.map((kf, idx) => {
+                                const leftPos = ((kf.time - activeClip.start) / (activeClip.end - activeClip.start)) * 100;
+                                if (leftPos >= 0 && leftPos <= 100) {
+                                    const isSelected = selectedKeyframes.some(st => Math.abs(st - kf.time) < 0.05);
+                                    const isSmooth = kf.transition === 'smooth';
+                                    const kfColor = isSmooth ? 'bg-blue-400' : 'bg-amber-400';
+                                    const shadowColor = isSmooth ? 'shadow-[0_0_8px_#60a5fa]' : 'shadow-[0_0_8px_#f59e0b]';
+
+                                    return (
+                                        <div
+                                            key={idx}
+                                            onPointerDown={(e) => {
+                                                e.stopPropagation();
+                                                if (lockedClips.includes(activeClipId)) return;
+
+                                                if (videoRef.current && !videoRef.current.paused) {
+                                                    videoRef.current.pause();
+                                                    setIsPlaying(false);
+                                                }
+
+                                                saveHistory();
+
+                                                if (!selectedKeyframes.includes(kf.time)) {
+                                                    setSelectedKeyframes([kf.time]);
+                                                }
+                                                setContextMenu(null);
+
+                                                if(videoRef.current) {
+                                                    videoRef.current.currentTime = kf.time;
+                                                    setCurrentTime(kf.time);
+                                                }
+
+                                                dragStart.current.isDraggingKeyframe = true;
+                                                dragStart.current.originalTime = kf.time;
+                                            }}
+                                            onContextMenu={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                if (!selectedKeyframes.includes(kf.time)) {
+                                                    setSelectedKeyframes([kf.time]);
+                                                }
+                                                setContextMenu({ x: e.clientX, y: e.clientY });
+                                            }}
+                                            className={`absolute top-1/2 -translate-y-1/2 w-4 h-4 rotate-45 border-[2px] z-30 pointer-events-auto flex items-center justify-center cursor-pointer transition-transform duration-200 ${isSelected ? 'scale-125 border-white' : 'border-zinc-900 hover:scale-110'} ${kfColor} ${shadowColor}`}
+                                            style={{ left: `calc(${leftPos}% - 8px)` }}
+                                        >
+                                            <div className="w-1 h-1 bg-zinc-900 rounded-full pointer-events-none"></div>
+                                        </div>
+                                    )
+                                }
+                                return null;
+                            })}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="w-[360px] bg-zinc-800 border-l border-zinc-700/50 flex flex-col shrink-0 relative z-20 shadow-[-10px_0_30px_rgba(0,0,0,0.3)]">
+                <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 custom-scrollbar">
+
+                    <div className="w-full aspect-[9/16] bg-black shadow-[0_15px_40px_rgba(0,0,0,0.5)] overflow-hidden relative border border-zinc-700/50 shrink-0 group/z3 flex flex-col rounded-2xl">
+
+                        <div className={`w-full h-full relative ${getContainerClass(activeData.layout)}`}>
+                            {Array.from({length: 6}).map((_, idx) => {
+                                const boxData = activeData.boxes[idx];
+                                const isVisible = !!boxData;
+                                const box = boxData || activeData.boxes[0] || { x: 0, y: 0, w: 100, h: 100, ratio: 9/16 };
+                                const boxAspect = box.ratio || 9/16;
+                                const cellAspect = activeData.frameCount === 1 ? (9/16) : getSlotRatio(activeData.layout, activeData.frameCount, idx);
+
+                                return (
+                                <div key={idx} className={getItemClass(activeData.layout, idx)} style={{ display: isVisible ? '' : 'none' }}>
+
+                                    <div className="absolute inset-0 z-0 overflow-hidden bg-black flex items-center justify-center">
+                                        <div style={{
+                                            aspectRatio: boxAspect,
+                                            minWidth: '100%',
+                                            minHeight: '100%',
+                                            width: boxAspect > cellAspect ? 'auto' : '100%',
+                                            height: boxAspect > cellAspect ? '100%' : 'auto',
+                                            filter: 'blur(20px) brightness(0.4)',
+                                            transform: 'scale(1.15)',
+                                            position: 'relative'
+                                        }}>
+                                            <video src={videoUrl} muted playsInline style={{
+                                                position: 'absolute', width: `${(100 / box.w) * 100}%`, height: `${(100 / box.h) * 100}%`, left: `-${(box.x / box.w) * 100}%`, top: `-${(box.y / box.h) * 100}%`,
+                                                objectFit: 'fill', maxWidth: 'none', maxHeight: 'none'
+                                            }} ref={el => {
+                                                if(el && videoRef.current) {
+                                                    if(Math.abs(el.currentTime - videoRef.current.currentTime) > 0.1) el.currentTime = videoRef.current.currentTime;
+                                                    if(isPlaying && el.paused) el.play().catch(()=>{});
+                                                    if(!isPlaying && !el.paused) el.pause();
+                                                }
+                                            }} />
+                                        </div>
+                                    </div>
+
+                                    <div className="absolute inset-0 flex items-center justify-center z-10">
+                                        <div className="relative overflow-hidden shrink-0 shadow-2xl bg-black" style={{
+                                            aspectRatio: boxAspect,
+                                            maxHeight: '100%',
+                                            maxWidth: '100%',
+                                            height: boxAspect < cellAspect ? '100%' : 'auto',
+                                            width: boxAspect >= cellAspect ? '100%' : 'auto',
+                                            display: 'flex',
+                                            margin: 'auto'
+                                        }}>
+                                            <video src={videoUrl} muted playsInline style={{
+                                                position: 'absolute', width: `${(100 / box.w) * 100}%`, height: `${(100 / box.h) * 100}%`, left: `-${(box.x / box.w) * 100}%`, top: `-${(box.y / box.h) * 100}%`,
+                                                objectFit: 'fill', maxWidth: 'none', maxHeight: 'none'
+                                            }} ref={el => {
+                                                if(el && videoRef.current) {
+                                                    if(Math.abs(el.currentTime - videoRef.current.currentTime) > 0.1) el.currentTime = videoRef.current.currentTime;
+                                                    if(isPlaying && el.paused) el.play().catch(()=>{});
+                                                    if(!isPlaying && !el.paused) el.pause();
+                                                }
+                                            }} />
+                                        </div>
+                                    </div>
+
+                                    {!isPlaying && isVisible && (
+                                        <div className={`absolute bottom-3 right-3 text-[11px] font-black px-2.5 py-1 rounded text-white opacity-60 z-20 shadow-sm ${bgColors[idx]}`}>{idx+1}</div>
+                                    )}
+                                </div>
+                            )})}
+                        </div>
+
+                        <div className="absolute inset-0 z-40 cursor-pointer" onClick={togglePlay}></div>
+
+                        <div className="absolute inset-0 z-50 opacity-0 group-hover/z3:opacity-100 transition-opacity bg-gradient-to-t from-black/80 via-transparent to-transparent flex flex-col justify-end p-5 pointer-events-none">
+                            <div className="flex items-center gap-4 pointer-events-auto">
+                                <button onClick={(e) => { e.stopPropagation(); togglePlay(); }} className="text-white hover:text-amber-500 transition-colors drop-shadow-md p-2 -ml-2">
+                                    {isPlaying ? <Pause size={20} className="fill-current" /> : <Play size={20} className="fill-current" />}
+                                </button>
+                                <div className="flex-1 h-1.5 bg-white/20 rounded-full relative overflow-hidden backdrop-blur-sm group/slider">
+                                    <div className="absolute top-0 left-0 h-full bg-amber-500 rounded-full shadow-[0_0_10px_#f59e0b]" style={{ width: `${progressPct || 0}%` }}></div>
+                                    <input
+                                        type="range" min={0} max={clipTotal || 0.1} step={0.01} value={clipCurrent}
+                                        onChange={(e) => {
+                                            const newTime = activeClip.start + parseFloat(e.target.value);
+                                            if(videoRef.current) { videoRef.current.currentTime = newTime; setCurrentTime(newTime); }
+                                        }}
+                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                    />
+                                </div>
+                                <span className="text-[11px] font-mono text-white tracking-widest drop-shadow-md">{formatMs(clipCurrent)}</span>
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); setIsFullscreenModalOpen(true); }}
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                    className="text-white hover:text-amber-500 transition-colors ml-1 drop-shadow-md p-2.5 -mr-2.5 flex items-center justify-center cursor-pointer"
+                                    title="Pop-up Fullscreen"
+                                >
+                                    <IconMaximize size={18} />
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-col gap-3 shrink-0 border-b border-white/5 pb-6">
+                        <button className="w-full py-3.5 bg-white/5 hover:bg-white/10 text-zinc-300 hover:text-white text-[11px] font-bold uppercase tracking-widest rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 border border-white/5 shadow-sm">
+                            <IconSubtitle /> Subtitle
+                        </button>
+                    </div>
+
+                    <div className="flex flex-col gap-3 shrink-0 mb-6">
+                        <div className="flex justify-between items-center bg-white/5 px-4 py-3 rounded-xl border border-white/5">
+                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Detail Tracking</span>
+                            <span className="text-[10px] font-bold text-amber-500 bg-amber-500/10 px-2.5 py-1 rounded-lg">{activeKeyframes.length} Keys</span>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                            {activeData.boxes.map((b, i) => (
+                                <div key={i} className="flex justify-between items-center bg-black/20 px-4 py-3.5 rounded-xl border border-white/5 flex-wrap shadow-inner">
+                                    <span className={`text-[12px] font-black uppercase ${boxColors[i].replace('border-','text-')}`}>F{i+1}</span>
+                                    <span className="text-[10px] font-mono text-zinc-400 tracking-wider">W:{b.w.toFixed(0)} H:{b.h.toFixed(0)} X:{b.x.toFixed(0)} Y:{b.y.toFixed(0)}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            {/* CONTEXT MENU KLIK KANAN HAPUS KEYFRAME (SUPPORT MULTI-DELETE) */}
+            {contextMenu && (
+                <div
+                    className="fixed z-[13000] bg-zinc-800 border border-zinc-700 rounded-lg py-1 shadow-2xl min-w-[140px]"
+                    style={{ top: contextMenu.y, left: contextMenu.x }}
+                >
+                    <button
+                        onPointerDown={(e) => { e.stopPropagation(); deleteSelectedKeyframes(); }}
+                        className="w-full text-left px-4 py-2 text-[11px] font-bold text-red-400 hover:bg-zinc-700 hover:text-red-300 flex items-center gap-2 transition-colors"
+                    >
+                        <Trash2 size={13} /> {selectedKeyframes.length > 1 ? `Hapus ${selectedKeyframes.length} Keyframe` : 'Hapus Keyframe'}
+                    </button>
+                </div>
+            )}
+
+            {/* POP-UP IN-APP FULLSCREEN PREVIEW */}
+            {isFullscreenModalOpen && (
+                <div className="fixed inset-0 z-[12000] bg-black flex flex-col items-center justify-center p-6 transition-opacity group/fs">
+
+                    <button onClick={() => setIsFullscreenModalOpen(false)} className="absolute top-6 right-6 text-white/50 hover:text-white z-[12050] p-2 transition-all drop-shadow-md hover:scale-110">
+                        <X size={24} className="stroke-[2.5]" />
+                    </button>
+
+                    <div className="w-full h-full flex items-center justify-center overflow-hidden relative">
+                        <div className="shadow-[0_20px_80px_rgba(0,0,0,0.8)] overflow-hidden relative border border-white/10 shrink-0 bg-black rounded-3xl flex flex-col"
+                            style={{ aspectRatio: '9/16', height: '100%', maxHeight: '90vh' }}>
+
+                            <div className={`w-full h-full relative ${getContainerClass(activeData.layout)}`}>
+                                {Array.from({length: 6}).map((_, idx) => {
+                                    const boxData = activeData.boxes[idx];
+                                    const isVisible = !!boxData;
+                                    const box = boxData || activeData.boxes[0] || { x: 0, y: 0, w: 100, h: 100, ratio: 9/16 };
+                                    const boxAspect = box.ratio || 9/16;
+                                    const cellAspect = activeData.frameCount === 1 ? (9/16) : getSlotRatio(activeData.layout, activeData.frameCount, idx);
+
+                                    return (
+                                    <div key={idx} className={getItemClass(activeData.layout, idx)} style={{ display: isVisible ? '' : 'none' }}>
+
+                                        <div className="absolute inset-0 z-0 overflow-hidden bg-black flex items-center justify-center">
+                                            <div style={{
+                                                aspectRatio: boxAspect,
+                                                minWidth: '100%',
+                                                minHeight: '100%',
+                                                width: boxAspect > cellAspect ? 'auto' : '100%',
+                                                height: boxAspect > cellAspect ? '100%' : 'auto',
+                                                filter: 'blur(20px) brightness(0.4)',
+                                                transform: 'scale(1.15)',
+                                                position: 'relative'
+                                            }}>
+                                                <video src={videoUrl} muted playsInline style={{
+                                                    position: 'absolute', width: `${(100 / box.w) * 100}%`, height: `${(100 / box.h) * 100}%`, left: `-${(box.x / box.w) * 100}%`, top: `-${(box.y / box.h) * 100}%`,
+                                                    objectFit: 'fill', maxWidth: 'none', maxHeight: 'none'
+                                                }} ref={el => {
+                                                    if(el && videoRef.current) {
+                                                        if(Math.abs(el.currentTime - videoRef.current.currentTime) > 0.1) el.currentTime = videoRef.current.currentTime;
+                                                        if(isPlaying && el.paused) el.play().catch(()=>{});
+                                                        if(!isPlaying && !el.paused) el.pause();
+                                                    }
+                                                }} />
+                                            </div>
+                                        </div>
+
+                                        <div className="absolute inset-0 flex items-center justify-center z-10">
+                                            <div className="relative overflow-hidden shrink-0 shadow-2xl bg-black" style={{
+                                                aspectRatio: boxAspect,
+                                                maxHeight: '100%',
+                                                maxWidth: '100%',
+                                                height: boxAspect < cellAspect ? '100%' : 'auto',
+                                                width: boxAspect >= cellAspect ? '100%' : 'auto',
+                                                display: 'flex',
+                                                margin: 'auto'
+                                            }}>
+                                                <video src={videoUrl} muted playsInline style={{
+                                                    position: 'absolute', width: `${(100 / box.w) * 100}%`, height: `${(100 / box.h) * 100}%`, left: `-${(box.x / box.w) * 100}%`, top: `-${(box.y / box.h) * 100}%`,
+                                                    objectFit: 'fill', maxWidth: 'none', maxHeight: 'none'
+                                                }} ref={el => {
+                                                    if(el && videoRef.current) {
+                                                        if(Math.abs(el.currentTime - videoRef.current.currentTime) > 0.1) el.currentTime = videoRef.current.currentTime;
+                                                        if(isPlaying && el.paused) el.play().catch(()=>{});
+                                                        if(!isPlaying && !el.paused) el.pause();
+                                                    }
+                                                }} />
+                                            </div>
+                                        </div>
+
+                                        {!isPlaying && isVisible && (
+                                            <div className={`absolute bottom-6 right-6 text-[16px] font-black px-4 py-2 rounded-lg text-white opacity-50 z-20 ${bgColors[idx]}`}>{idx+1}</div>
+                                        )}
+                                    </div>
+                                )})}
+                            </div>
+
+                            <div className="absolute inset-0 z-40 cursor-pointer" onClick={togglePlay}></div>
+
+                            <div className="absolute bottom-0 left-0 right-0 z-50 opacity-0 group-hover/fs:opacity-100 transition-opacity bg-gradient-to-t from-black/60 via-transparent to-transparent flex flex-col justify-end px-6 pb-6 pointer-events-none">
+                                <div className="flex items-center gap-4 pointer-events-auto drop-shadow-[0_2px_5px_rgba(0,0,0,0.8)]">
+                                    <button onClick={(e) => { e.stopPropagation(); togglePlay(); }} className="text-white hover:text-amber-500 transition-colors p-2 -ml-2">
+                                        {isPlaying ? <Pause size={18} className="fill-current" /> : <Play size={18} className="fill-current" />}
+                                    </button>
+                                    <div className="flex-1 h-1 bg-white/30 rounded-full relative overflow-hidden backdrop-blur-sm group/slider">
+                                        <div className="absolute top-0 left-0 h-full bg-amber-500 rounded-full shadow-[0_0_10px_#f59e0b]" style={{ width: `${progressPct || 0}%` }}></div>
+                                        <input
+                                            type="range" min={0} max={clipTotal || 0.1} step={0.01} value={clipCurrent}
+                                            onChange={(e) => {
+                                                const newTime = activeClip.start + parseFloat(e.target.value);
+                                                if(videoRef.current) { videoRef.current.currentTime = newTime; setCurrentTime(newTime); }
+                                            }}
+                                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                        />
+                                    </div>
+                                    <span className="text-[10px] font-mono text-white tracking-widest">{formatMs(clipCurrent)} / {formatMs(clipTotal)}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+const HalamanEditKlip = ({
+    showCropModal,
+    editingClips,
+    videoUrl,
+    setShowCropModal,
+    clips,
+    addToast,
+    processAndCutClips
+}) => {
+    if (!showCropModal) return null;
+
+    return (
+        <CropModal
+            selectedClips={editingClips}
+            videoUrl={videoUrl}
+            onClose={() => setShowCropModal(false)}
+            onSaveAll={(exports) => {
+                // 1. JANGAN TUTUP MODAL EDIT
+                // setShowCropModal(false); <-- sengaja tidak dipanggil
+
+                // 2. Ambil semua ID klip yang diekspor
+                const exportedIds = Object.keys(exports);
+
+                // 3. Filter klip tersebut dari state utama
+                const clipsToCut = clips.filter(c => exportedIds.includes(c.id));
+
+                // 4. Eksekusi pemotongan/render otomatis
+                if (clipsToCut.length > 0) {
+                    addToast("Memulai proses ekspor dari halaman edit...", "info");
+                    // Langsung panggil render, modal My Clip (z-index 15000) akan numpuk di atas modal edit ini
+                    processAndCutClips(clipsToCut);
+                }
+            }}
+        />
+    );
+};
+"""
+
+with open("static/pages/edit_klip.jsx", "w", encoding="utf-8") as f:
+    f.write(edit_klip_code.strip())
+
+# Simpan juga cadangan ke crop_code.jsx untuk kompatibilitas penuh
+with open("static/crop_code.jsx", "w", encoding="utf-8") as f:
+    f.write(edit_klip_code.strip())
+
+if "compile_kepkat_ui" in globals():
+    compile_kepkat_ui()
+print("✅ CELL 5 (Halaman Edit Klip) berhasil disimpan!")
