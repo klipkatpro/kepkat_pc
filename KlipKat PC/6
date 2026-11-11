@@ -1,0 +1,1545 @@
+# @title CELL 6: KERANGKA INDUK / CORE APP (STATE UTAMA, TEMA & COMPILER)
+# ==============================================================================
+import os, glob, requests, base64
+
+os.makedirs("static", exist_ok=True)
+os.makedirs("static/pages", exist_ok=True)
+os.makedirs("static/raw_videos", exist_ok=True)
+os.makedirs("static/cut_clips", exist_ok=True)
+
+def fetch_image(url):
+    try:
+        r = requests.get(url)
+        if r.status_code == 200:
+            return f"data:image/png;base64,{base64.b64encode(r.content).decode('utf-8')}"
+    except: pass
+    return ""
+
+# Pakai URL format raw untuk bypass render HTML Github
+b64_panjang = fetch_image("https://github.com/klipkatpro/klipkat_asset/blob/main/Gambar/Logo%20Panjang.png?raw=true")
+b64_kotak = fetch_image("https://github.com/klipkatpro/klipkat_asset/blob/main/Gambar/Logo%20Kotak.jpg?raw=true")
+
+# ====================================================================================================
+# FRONTEND CORE (KERANGKA INDUK HTML, CSS, STATE & PENGGABUNG HALAMAN)
+# ====================================================================================================
+core_html_template = r"""
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <!-- PWA META TAGS: HIDE URL BAR BROWSER -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#000000">
+    <title>KepKat Klipper</title>
+    <link rel="icon" type="image/png" href="FAVICON_PLACEHOLDER" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="importmap">
+    {
+        "imports": {
+            "react": "https://esm.sh/react@18.2.0",
+            "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+            "lucide-react": "https://esm.sh/lucide-react@0.263.0"
+        }
+    }
+    </script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        /* THEME VARIABLES & OVERRIDES */
+        [data-theme="yellow"] {
+            --bg-body: #000000;
+            --bg-panel: #0a0a0a;
+            --bg-card: rgba(24, 24, 27, 0.8);
+            --bg-input: rgba(255,255,255,0.05);
+            --border-color: rgba(39, 39, 42, 0.8);
+            --text-main: #f4f4f5;
+            --text-muted: #a1a1aa;
+            --text-faint: #71717a;
+            --accent-text: #eab308;
+            --accent-hover: #facc15;
+            --accent-gradient: linear-gradient(to right, #eab308, #f59e0b);
+            --accent-glow: rgba(234, 179, 8, 0.3);
+        }
+        [data-theme="main"] {
+            --bg-body: #000000;
+            --bg-panel: #0a0a0a;
+            --bg-card: rgba(24, 24, 27, 0.8);
+            --bg-input: rgba(255,255,255,0.05);
+            --border-color: rgba(39, 39, 42, 0.8);
+            --text-main: #f4f4f5;
+            --text-muted: #a1a1aa;
+            --text-faint: #71717a;
+            --accent-text: #3b82f6;
+            --accent-hover: #60a5fa;
+            --accent-gradient: linear-gradient(to right, #3b82f6, #8b5cf6);
+            --accent-glow: rgba(59, 130, 246, 0.3);
+        }
+        [data-theme="red"] {
+            --bg-body: #000000;
+            --bg-panel: #0a0a0a;
+            --bg-card: rgba(24, 24, 27, 0.8);
+            --bg-input: rgba(255,255,255,0.05);
+            --border-color: rgba(39, 39, 42, 0.8);
+            --text-main: #f4f4f5;
+            --text-muted: #a1a1aa;
+            --text-faint: #71717a;
+            --accent-text: #ef4444;
+            --accent-hover: #f87171;
+            --accent-gradient: linear-gradient(to right, #ef4444, #dc2626);
+            --accent-glow: rgba(239, 68, 68, 0.3);
+        }
+        [data-theme="green"] {
+            --bg-body: #000000;
+            --bg-panel: #0a0a0a;
+            --bg-card: rgba(24, 24, 27, 0.8);
+            --bg-input: rgba(255,255,255,0.05);
+            --border-color: rgba(39, 39, 42, 0.8);
+            --text-main: #f4f4f5;
+            --text-muted: #a1a1aa;
+            --text-faint: #71717a;
+            --accent-text: #22c55e;
+            --accent-hover: #4ade80;
+            --accent-gradient: linear-gradient(to right, #22c55e, #16a34a);
+            --accent-glow: rgba(34, 197, 94, 0.3);
+        }
+        [data-theme="orange"] {
+            --bg-body: #000000;
+            --bg-panel: #050505;
+            --bg-card: rgba(24, 24, 27, 0.8);
+            --bg-input: #000000;
+            --border-color: rgba(249, 115, 22, 0.4);
+            --text-main: #ffffff;
+            --text-muted: #fdba74;
+            --text-faint: #fed7aa;
+            --accent-text: #f97316;
+            --accent-hover: #fb923c;
+            --accent-gradient: linear-gradient(to right, #f97316, #ea580c);
+            --accent-glow: rgba(249, 115, 22, 0.3);
+        }
+
+        [data-theme] {
+            background-color: var(--bg-body) !important;
+            color: var(--text-main) !important;
+            transition: background-color 0.6s ease, color 0.6s ease, border-color 0.6s ease;
+        }
+        [data-theme] .bg-\[\#09090b\], [data-theme] .bg-\[\#000000\] { background-color: var(--bg-body) !important; transition: background-color 0.6s ease; }
+        [data-theme] .bg-zinc-950, [data-theme] .bg-zinc-950\/50, [data-theme] .bg-zinc-950\/80, [data-theme] .bg-zinc-950\/90 { background-color: var(--bg-panel) !important; transition: background-color 0.6s ease; }
+        [data-theme] .bg-zinc-900, [data-theme] .bg-zinc-900\/40, [data-theme] .bg-zinc-900\/50, [data-theme] .bg-zinc-900\/60, [data-theme] .bg-zinc-900\/80 { background-color: var(--bg-card) !important; transition: background-color 0.6s ease; }
+        [data-theme] .bg-black\/50, [data-theme] .bg-black\/40, [data-theme] .bg-black\/60 { background-color: var(--bg-input) !important; transition: background-color 0.6s ease; }
+        [data-theme] .border-zinc-800, [data-theme] .border-zinc-800\/50, [data-theme] .border-zinc-800\/80, [data-theme] .border-zinc-700, [data-theme] .border-zinc-700\/80 { border-color: var(--border-color) !important; transition: border-color 0.6s ease; }
+
+        [data-theme] .text-zinc-100, [data-theme] .text-zinc-200, [data-theme] .text-white { color: var(--text-main) !important; transition: color 0.6s ease; }
+        [data-theme] .text-zinc-300, [data-theme] .text-zinc-400 { color: var(--text-muted) !important; transition: color 0.6s ease; }
+        [data-theme] .text-zinc-500, [data-theme] .text-zinc-600 { color: var(--text-faint) !important; transition: color 0.6s ease; }
+
+        [data-theme] .text-yellow-500, [data-theme] .text-yellow-400, [data-theme] .text-amber-500, [data-theme] .text-amber-400 { color: var(--accent-text) !important; transition: color 0.6s ease; }
+        [data-theme] .hover\:text-yellow-400:hover, [data-theme] .hover\:text-yellow-500:hover, [data-theme] .hover\:text-amber-400:hover { color: var(--accent-hover) !important; }
+
+        [data-theme] .bg-yellow-500, [data-theme] .bg-amber-500, [data-theme] .from-yellow-500 { background: var(--accent-gradient) !important; color: #fff !important; transition: background 0.6s ease; border-color: transparent !important; }
+        [data-theme] .hover\:bg-yellow-400:hover, [data-theme] .hover\:bg-amber-400:hover { filter: brightness(1.15); color: #fff !important; }
+
+        [data-theme] .border-yellow-500, [data-theme] .border-yellow-500\/50, [data-theme] .focus\:border-yellow-500:focus { border-color: var(--accent-text) !important; }
+        [data-theme] .focus\:ring-yellow-500:focus { --tw-ring-color: var(--accent-text) !important; }
+        [data-theme] .accent-yellow-500, [data-theme] .accent-yellow-400 { accent-color: var(--accent-text) !important; }
+
+        [data-theme] .shadow-\[0_0_15px_rgba\(234\,179\,8\,0\.3\)\] { box-shadow: 0 0 15px var(--accent-glow) !important; }
+        [data-theme] .shadow-\[0_0_20px_rgba\(234\,179\,8\,0\.15\)\] { box-shadow: 0 0 20px var(--accent-glow) !important; }
+        [data-theme] .shadow-\[0_0_10px_rgba\(234\,179\,8\,0\.05\)\] { box-shadow: 0 0 10px var(--accent-glow) !important; }
+        [data-theme] .shadow-\[0_0_10px_rgba\(234\,179\,8\,0\.2\)\] { box-shadow: 0 0 10px var(--accent-glow) !important; }
+        [data-theme] .shadow-\[0_0_8px_rgba\(234\,179\,8\,0\.3\)\] { box-shadow: 0 0 8px var(--accent-glow) !important; }
+
+        [data-theme] .fill-current { fill: currentColor !important; }
+        body, html { background-color: var(--bg-body); transition: background-color 0.6s ease; }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 3px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 3px; }
+        .panel-left { width: 100%; }
+        @media (min-width: 768px) {
+            .panel-left { width: var(--left-width, 100%); }
+        }
+        .toast-enter { animation: toastIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        .toast-exit { animation: toastOut 0.4s cubic-bezier(0.55, 0.085, 0.68, 0.53) forwards; }
+        @keyframes toastIn {
+            0% { transform: translateY(-150%) scale(0.9); opacity: 0; }
+            100% { transform: translateY(0) scale(1); opacity: 1; }
+        }
+        @keyframes toastOut {
+            0% { transform: translateY(0) scale(1); opacity: 1; }
+            100% { transform: translateY(-150%) scale(0.9); opacity: 0; }
+        }
+        @keyframes fire-glow {
+            0% { box-shadow: 0 0 15px #facc15, inset 0 0 15px #facc15; border-color: #facc15; }
+            50% { box-shadow: 0 0 30px #eab308, inset 0 0 25px #eab308; border-color: #eab308; }
+            100% { box-shadow: 0 0 15px #facc15, inset 0 0 15px #facc15; border-color: #facc15; }
+        }
+        .gpu-fire { animation: fire-glow 2s infinite; }
+        .gpu-text-fire { background: linear-gradient(to right, #facc15, #eab308, #ca8a04); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    </style>
+</head>
+<body class="bg-[#000000] text-zinc-100 relative">
+    <div id="root"></div>
+    <script type="text/babel" data-type="module">
+        import React, { useState, useRef, useEffect } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { Upload, Play, Pause, Scissors, Download, Plus, Trash2, CheckSquare, Square, Settings, FileVideo, Clock, Eye, X, Sparkles, Coffee, FileSpreadsheet, FileDown, UploadCloud, ClipboardPaste, Info, ShoppingCart, BookOpen, RefreshCw, Copy, Check, Youtube, Instagram, Minus, List, Link, Rewind, FastForward, Maximize, SkipBack, SkipForward, Minimize, ArrowLeft, LayoutGrid, CheckCircle2, AlertTriangle, XCircle, Activity, Move, Flame, Bot, BrainCircuit, ChevronDown, Undo, Redo, Edit } from 'lucide-react';
+
+        const generateId = () => 'clip_' + Date.now().toString(36) + '_' + Math.random().toString(36).substr(2, 9);
+
+        const formatDurationDisplay = (totalSeconds) => {
+            if (isNaN(totalSeconds) || !isFinite(totalSeconds) || totalSeconds < 0) return "0 dtk";
+            const s = Math.floor(totalSeconds);
+            if (s < 60) return `${s} dtk`;
+            const m = Math.floor(s / 60);
+            const remS = s % 60;
+            return remS > 0 ? `${m} mnt ${remS} dtk` : `${m} mnt`;
+        };
+
+        const formatTimeCompact = (totalSeconds) => {
+            if (isNaN(totalSeconds) || !isFinite(totalSeconds) || totalSeconds < 0) return "00:00";
+            const s = Math.floor(totalSeconds);
+            const m = Math.floor(s / 60);
+            const remS = s % 60;
+            const h = Math.floor(m / 60);
+            const remM = m % 60;
+            if (h > 0) return `${h}:${remM.toString().padStart(2, '0')}:${remS.toString().padStart(2, '0')}`;
+            return `${remM.toString().padStart(2, '0')}:${remS.toString().padStart(2, '0')}`;
+        };
+
+        const TimeInput = ({ clip, type, updateClip }) => {
+            const val = type === 'start' ? clip.start : clip.end;
+
+            const [h, setH] = useState(Math.floor(val / 3600).toString());
+            const [m, setM] = useState(Math.floor((val % 3600) / 60).toString());
+            const [s, setS] = useState(Math.floor(val % 60).toString());
+
+            useEffect(() => {
+                setH(Math.floor(val / 3600).toString());
+                setM(Math.floor((val % 3600) / 60).toString());
+                setS(Math.floor(val % 60).toString());
+            }, [val]);
+
+            const handleBlur = () => {
+                const newH = parseInt(h) || 0;
+                const newM = parseInt(m) || 0;
+                const newS = parseInt(s) || 0;
+                const totalSeconds = (newH * 3600) + (newM * 60) + newS;
+                updateClip(clip.id, type, totalSeconds);
+            };
+
+            const handleKeyDown = (e) => {
+                if (e.key === 'Enter') {
+                e.target.blur();
+                }
+            };
+
+            return (
+                <div className="flex items-center gap-1 mt-1">
+                <div className="flex flex-col flex-1">
+                    <span className="text-[8px] text-zinc-500 font-bold uppercase tracking-wider mb-0.5 text-center">Jam</span>
+                    <input type="number" min="0" value={h} onChange={e => setH(e.target.value)} onBlur={handleBlur} onKeyDown={handleKeyDown} className="w-full bg-black/50 border border-zinc-700 focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 rounded text-center text-xs py-1 text-zinc-100 outline-none transition-all font-mono active:scale-95" />
+                </div>
+                <span className="text-zinc-500 mt-4 font-bold">:</span>
+                <div className="flex flex-col flex-1">
+                    <span className="text-[8px] text-zinc-500 font-bold uppercase tracking-wider mb-0.5 text-center">Mnt</span>
+                    <input type="number" min="0" max="59" value={m} onChange={e => setM(e.target.value)} onBlur={handleBlur} onKeyDown={handleKeyDown} className="w-full bg-black/50 border border-zinc-700 focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 rounded text-center text-xs py-1 text-zinc-100 outline-none transition-all font-mono active:scale-95" />
+                </div>
+                <span className="text-zinc-500 mt-4 font-bold">:</span>
+                <div className="flex flex-col flex-1">
+                    <span className="text-[8px] text-zinc-500 font-bold uppercase tracking-wider mb-0.5 text-center">Dtk</span>
+                    <input type="number" min="0" max="59" value={s} onChange={e => setS(e.target.value)} onBlur={handleBlur} onKeyDown={handleKeyDown} className="w-full bg-black/50 border border-zinc-700 focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 rounded text-center text-xs py-1 text-zinc-100 outline-none transition-all font-mono active:scale-95" />
+                </div>
+                </div>
+            );
+        };
+
+        const ToastItem = ({ t, removeToast }) => {
+            const [offset, setOffset] = useState(0);
+            const [isDragging, setIsDragging] = useState(false);
+            const startX = useRef(0);
+
+            const handlePointerDown = (e) => {
+                setIsDragging(true);
+                startX.current = e.clientX;
+                e.target.setPointerCapture(e.pointerId);
+            };
+
+            const handlePointerMove = (e) => {
+                if(!isDragging) return;
+                const currentX = e.clientX;
+                setOffset(currentX - startX.current);
+            };
+
+            const handlePointerUp = (e) => {
+                setIsDragging(false);
+                e.target.releasePointerCapture(e.pointerId);
+                if (Math.abs(offset) > 100) {
+                    removeToast(t.id);
+                } else {
+                    setOffset(0);
+                }
+            };
+
+            return (
+                <div
+                    onPointerDown={handlePointerDown}
+                    onPointerMove={handlePointerMove}
+                    onPointerUp={handlePointerUp}
+                    onPointerCancel={handlePointerUp}
+                    className={`pointer-events-auto flex items-center gap-3 px-6 py-3.5 rounded-xl shadow-2xl border cursor-grab active:cursor-grabbing transition-transform duration-200 ${isDragging ? 'duration-0' : ''} ${t.type==='error'?'bg-red-950/90 border-red-900 text-red-200': t.type==='success'?'bg-emerald-950/90 border-emerald-900 text-emerald-200': t.type==='warning'?'bg-amber-950/90 border-amber-900 text-amber-200':'bg-zinc-900/90 border-zinc-800 text-zinc-200'} backdrop-blur-md`}
+                    style={{ transform: `translateX(${offset}px)` }}
+                >
+                    {t.type === 'error' && <AlertTriangle size={18} className="text-red-500 shrink-0" />}
+                    {t.type === 'success' && <CheckCircle2 size={18} className="text-emerald-500 shrink-0" />}
+                    {t.type === 'warning' && <Info size={18} className="text-amber-500 shrink-0" />}
+                    {t.type === 'info' && <Activity size={18} className="text-yellow-500 shrink-0" />}
+                    <span className="text-xs font-bold uppercase tracking-wider drop-shadow-md">{t.msg}</span>
+                </div>
+            );
+        };
+
+        const CustomSelect = ({ value, options, onChange, label }) => {
+            const [isOpen, setIsOpen] = useState(false);
+            const wrapperRef = useRef(null);
+
+            useEffect(() => {
+                const handleClickOutside = (e) => { if (wrapperRef.current && !wrapperRef.current.contains(e.target)) setIsOpen(false); };
+                document.addEventListener('mousedown', handleClickOutside);
+                return () => document.removeEventListener('mousedown', handleClickOutside);
+            }, []);
+
+            const selectedLabel = options.find(o => o.value === value)?.label || value;
+            return (
+                <div ref={wrapperRef} className="relative w-full">
+                    <div onClick={() => setIsOpen(!isOpen)} className="w-full bg-black/50 border border-zinc-800 rounded p-1.5 text-[10px] cursor-pointer flex justify-between items-center font-medium text-zinc-300 hover:border-yellow-500 transition-all">
+                        <span className="truncate">{selectedLabel}</span>
+                        <ChevronDown size={12} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                    </div>
+                    {isOpen && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-[#000000] border-2 border-zinc-700 rounded shadow-2xl z-[9999] max-h-40 overflow-y-auto custom-scrollbar opacity-100">
+                            {options.map(opt => (
+                                <div key={opt.value} onClick={() => { onChange(opt.value); setIsOpen(false); }} className={`px-2 py-1.5 text-[10px] cursor-pointer transition-colors ${value === opt.value ? 'bg-yellow-500/10 text-yellow-500 font-bold' : 'text-zinc-300 hover:bg-yellow-500/20 hover:text-yellow-400'}`}>
+                                    {opt.label}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // --- INJEKSI_SEMUA_HALAMAN_DI_SINI ---
+
+        function App() {
+            const [appTheme, setAppTheme] = useState('yellow');
+            const [currentView, setCurrentView] = useState('home');
+
+            const cycleTheme = () => {
+                setAppTheme(prev => {
+                    if(prev === 'yellow') return 'main';
+                    if(prev === 'main') return 'red';
+                    if(prev === 'red') return 'green';
+                    if(prev === 'green') return 'orange';
+                    return 'yellow';
+                });
+            };
+
+            const [toasts, setToasts] = useState([]);
+            const [isServerOnline, setIsServerOnline] = useState(true);
+            const [downloadStatus, setDownloadStatus] = useState('idle');
+            const [downloadProgress, setDownloadProgress] = useState(0);
+
+            const [isGpuMode, setIsGpuMode] = useState(false);
+            const [isPromptCopied, setIsPromptCopied] = useState(false);
+
+            const removeToast = (id) => {
+                setToasts(prev => prev.map(t => t.id === id ? {...t, exiting: true} : t));
+                setTimeout(() => {
+                    setToasts(prev => prev.filter(t => t.id !== id));
+                }, 400);
+            };
+
+            const addToast = (msg, type='info') => {
+                const id = Date.now() + Math.random();
+                setToasts(prev => {
+                    let list = [...prev, {id, msg, type, exiting: false}];
+                    if(list.length > 4) {
+                        list = list.slice(list.length - 4);
+                    }
+                    return list;
+                });
+                setTimeout(() => removeToast(id), 5000);
+            };
+
+            const clearAllToasts = () => {
+                setToasts(prev => prev.map(t => ({...t, exiting: true})));
+                setTimeout(() => setToasts([]), 400);
+            };
+
+            const toggleGpuMode = async () => {
+                if (!isGpuMode) {
+                    addToast("Mengecek ketersediaan GPU di Server...", "info");
+                    try {
+                        const res = await fetch('/api/check_gpu');
+                        const data = await res.json();
+                        if (data.gpu) {
+                            setIsGpuMode(true);
+                            addToast("Mode GPU Diaktifkan! Render secepat kilat⚡", "success");
+                        } else {
+                            addToast("GPU tidak terdeteksi! Mengalihkan ke CPU.", "error");
+                            setIsGpuMode(false);
+                        }
+                    } catch(e) {
+                        addToast("Gagal mengecek GPU.", "error");
+                    }
+                } else {
+                    setIsGpuMode(false);
+                    addToast("Mode GPU Dimatikan. Beralih ke CPU.", "info");
+                }
+            };
+
+            const [file, setFile] = useState(null);
+            const [youtubeUrlInput, setYoutubeUrlInput] = useState('');
+            const [isFetchingUrl, setIsFetchingUrl] = useState(false);
+
+            const [videoUrl, setVideoUrl] = useState(null);
+            const [videoIdHash, setVideoIdHash] = useState(null);
+            const [videoMeta, setVideoMeta] = useState(null);
+
+            const [duration, setDuration] = useState(0);
+            const [currentTime, setCurrentTime] = useState(0);
+            const [isPlaying, setIsPlaying] = useState(false);
+            const videoRef = useRef(null);
+
+            const [globalRatio, setGlobalRatio] = useState('original');
+            const [globalQuality, setGlobalQuality] = useState('1080p');
+            const [engineSpeed, setEngineSpeed] = useState('fast');
+
+            // KUSTOMISASI STATE UNDO/REDO UNTUK CLIPS
+            const [clips, _setClips] = useState([]);
+            const [pastClips, setPastClips] = useState([]);
+            const [futureClips, setFutureClips] = useState([]);
+
+            // State Edit Modal
+            const [showCropModal, setShowCropModal] = useState(false);
+            const [editingClips, setEditingClips] = useState([]);
+
+            const setClips = (newClips) => {
+                _setClips(prev => {
+                    const nextClips = typeof newClips === 'function' ? newClips(prev) : newClips;
+                    setPastClips(p => {
+                        const newPast = [...p, prev];
+                        if (newPast.length > 50) return newPast.slice(newPast.length - 50);
+                        return newPast;
+                    });
+                    setFutureClips([]);
+                    return nextClips;
+                });
+            };
+
+            const handleUndo = () => {
+                if (pastClips.length === 0) return;
+                const previous = pastClips[pastClips.length - 1];
+                setPastClips(p => p.slice(0, p.length - 1));
+                setFutureClips(f => [clips, ...f]);
+                _setClips(previous);
+            };
+
+            const handleRedo = () => {
+                if (futureClips.length === 0) return;
+                const next = futureClips[0];
+                setFutureClips(f => f.slice(1));
+                setPastClips(p => [...p, clips]);
+                _setClips(next);
+            };
+
+            const [previewingClipId, setPreviewingClipId] = useState(null);
+
+            const [cutClips, setCutClips] = useState([]);
+            const [showMyClipModal, setShowMyClipModal] = useState(false);
+            const [selectedMyClips, setSelectedMyClips] = useState([]);
+
+            const abortControllersRef = useRef({});
+            const [clipDownloadProgresses, setClipDownloadProgresses] = useState({});
+
+            const [isProcessing, setIsProcessing] = useState(false);
+            const [processProgress, setProcessProgress] = useState(0);
+            const [processStatus, setProcessStatus] = useState('');
+            const [currentProcessIndex, setCurrentProcessIndex] = useState(0);
+            const [totalProcessCount, setTotalProcessCount] = useState(0);
+            const [currentClipName, setCurrentClipName] = useState('');
+
+            const [showCsvModal, setShowCsvModal] = useState(false);
+            const [csvText, setCsvText] = useState('');
+            const [csvJumlahClip, setCsvJumlahClip] = useState('10');
+            const [csvDurasiClip, setCsvDurasiClip] = useState('1');
+            const [csvCatatan, setCsvCatatan] = useState('');
+
+            const [history, setHistory] = useState([]);
+
+            const [isMiniPlayer, setIsMiniPlayer] = useState(false);
+            const [miniPos, setMiniPos] = useState({ x: 20, y: 80 });
+
+            const [sholatReminder, setSholatReminder] = useState('');
+            const [isGeneratingReminder, setIsGeneratingReminder] = useState(false);
+            const [isReading, setIsReading] = useState(false);
+
+            const [leftWidth, setLeftWidth] = useState(40);
+            const [isDragging, setIsDragging] = useState(false);
+
+            const containerRef = useRef(null);
+            const cancelRenderRef = useRef(false);
+
+            useEffect(() => {
+                if(window.innerWidth > 0) {
+                    setMiniPos({ x: window.innerWidth > 768 ? window.innerWidth - 340 : (window.innerWidth - 220) / 2, y: 80 });
+                }
+                loadSavedClips();
+                loadHistory();
+            }, []);
+
+            const loadSavedClips = async () => {
+                try {
+                    const res = await fetch('/api/get_my_clips');
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data.clips) {
+                            setCutClips(data.clips);
+                            setSelectedMyClips(data.clips.map(c => c.id));
+                        }
+                    }
+                } catch (e) {}
+            };
+
+            const loadHistory = async () => {
+                try {
+                    const res = await fetch('/api/get_history');
+                    if (res.ok) {
+                        const data = await res.json();
+                        setHistory(data.history || []);
+                    }
+                } catch(e){}
+            };
+
+            let healthFailCount = useRef(0);
+            useEffect(() => {
+                const checkHealth = async () => {
+                    try {
+                        const res = await fetch('/api/health');
+                        if (res.ok) {
+                            healthFailCount.current = 0;
+                            if (!isServerOnline) { setIsServerOnline(true); addToast("Server kembali terhubung!", "success"); }
+                        } else throw new Error();
+                    } catch (e) {
+                        healthFailCount.current += 1;
+                        if (healthFailCount.current > 2 && isServerOnline) { setIsServerOnline(false); addToast("Koneksi ke Server terputus!", "error"); }
+                    }
+                };
+                const iv = setInterval(checkHealth, 1000);
+                return () => clearInterval(iv);
+            }, [isServerOnline]);
+
+            useEffect(() => {
+                let iv;
+                if (videoIdHash && downloadStatus === 'downloading') {
+                    iv = setInterval(async () => {
+                        try {
+                            const res = await fetch(`/api/check_download/${videoIdHash}`);
+                            const data = await res.json();
+                            if (data.status === 'downloading') {
+                                setDownloadProgress(data.progress || 0);
+                            } else if (data.status === 'done') {
+                                setDownloadStatus('done');
+                                setDownloadProgress(100);
+                                if (data.size_str) {
+                                    setVideoMeta(prev => prev ? { ...prev, size_str: data.size_str } : prev);
+                                }
+                                addToast("Video full berhasil di-download! Siap dipotong.", "success");
+                                loadHistory();
+                            } else if (data.status === 'blocked') {
+                                setDownloadStatus('blocked');
+                                addToast("Server diblokir YouTube! Solusi: Ganti IP atau Restart Colab.", "error");
+                            } else if (data.status === 'error') {
+                                setDownloadStatus('error');
+                                addToast("Terjadi error saat mendownload video background.", "error");
+                            }
+                        } catch(e) {}
+                    }, 1000);
+                }
+                return () => clearInterval(iv);
+            }, [videoIdHash, downloadStatus]);
+
+            const handleDragStart = (e) => {
+                if (!isMiniPlayer) return;
+                if (e.target.closest('button') || e.target.tagName.toLowerCase() === 'input') return;
+
+                const rect = e.currentTarget.getBoundingClientRect();
+                const x = e.clientX || (e.touches && e.touches[0].clientX);
+                const y = e.clientY || (e.touches && e.touches[0].clientY);
+                if (x > rect.right - 25 && y > rect.bottom - 25) return;
+
+                const startX = x;
+                const startY = y;
+                const initialX = miniPos.x;
+                const initialY = miniPos.y;
+
+                const onMove = (moveEvent) => {
+                    const clientX = moveEvent.clientX || (moveEvent.touches && moveEvent.touches[0].clientX);
+                    const clientY = moveEvent.clientY || (moveEvent.touches && moveEvent.touches[0].clientY);
+                    setMiniPos({
+                        x: initialX + (clientX - startX),
+                        y: initialY + (clientY - startY)
+                    });
+                };
+
+                const onUp = () => {
+                    document.removeEventListener('mousemove', onMove);
+                    document.removeEventListener('mouseup', onUp);
+                    document.removeEventListener('touchmove', onMove);
+                    document.removeEventListener('touchend', onUp);
+                };
+
+                document.addEventListener('mousemove', onMove);
+                document.addEventListener('mouseup', onUp);
+                document.addEventListener('touchmove', onMove, { passive: false });
+                document.addEventListener('touchend', onUp);
+            };
+
+            const handleSeekAndExtend = (clipId, currentVidTime, amount, isFullScreen = false) => {
+                const targetClip = clips.find(c => c.id === clipId);
+                if (!targetClip) return;
+
+                let newTime = currentVidTime + amount;
+                let updatedStart = targetClip.start;
+                let updatedEnd = targetClip.end;
+                let didUpdate = false;
+
+                if (newTime < targetClip.start) {
+                updatedStart = Math.max(0, targetClip.start - 1);
+                newTime = updatedStart;
+                didUpdate = true;
+                } else if (newTime > targetClip.end) {
+                updatedEnd = Math.min(duration || targetClip.end + 1, targetClip.end + 1);
+                newTime = updatedEnd;
+                didUpdate = true;
+                }
+
+                if (didUpdate) {
+                setClips(prev => prev.map(c => c.id === clipId ? { ...c, start: updatedStart, end: updatedEnd } : c));
+                }
+
+                if (!isFullScreen && videoRef.current) {
+                if (previewingClipId !== clipId) setPreviewingClipId(clipId);
+                videoRef.current.currentTime = newTime;
+                setCurrentTime(newTime);
+                }
+            };
+
+            const generateSholatReminder = async () => {
+                setIsGeneratingReminder(true);
+                const fallbacks = [
+                    "Sebanyak apapun cuan lu hari ini, gak bakal berkah kalo kewajiban ke Sang Pencipta lu skip. Gas sholat 5 waktu cuy!",
+                    "Sukses jalur langit itu nyata bro. Jangan cuma ngejar views dan followers, kejar juga ridho-Nya lewat sholat.",
+                    "Cuan bisa dicari, tapi waktu sholat nggak bisa diulang. Jangan lupa utamain kewajiban lu sebagai hamba-Nya ya!"
+                ];
+                setSholatReminder(fallbacks[Math.floor(Math.random() * fallbacks.length)]);
+                setIsGeneratingReminder(false);
+            };
+
+            const readAloud = () => {
+                if (!sholatReminder || isGeneratingReminder) return;
+                if (isReading) {
+                window.speechSynthesis.cancel();
+                setIsReading(false);
+                return;
+                }
+                const utterance = new SpeechSynthesisUtterance(sholatReminder);
+                utterance.lang = 'id-ID';
+                utterance.onstart = () => setIsReading(true);
+                utterance.onend = () => setIsReading(false);
+                utterance.onerror = () => setIsReading(false);
+                window.speechSynthesis.cancel();
+                window.speechSynthesis.speak(utterance);
+            };
+
+            useEffect(() => {
+                if (isGeneratingReminder && isReading) {
+                window.speechSynthesis.cancel();
+                setIsReading(false);
+                }
+            }, [isGeneratingReminder]);
+
+            useEffect(() => {
+                if (!sholatReminder) {
+                generateSholatReminder();
+                }
+            }, []);
+
+            useEffect(() => {
+                const handleMouseMove = (e) => {
+                if (!isDragging || !containerRef.current) return;
+                const containerRect = containerRef.current.getBoundingClientRect();
+                let newLeftWidth = ((e.clientX - containerRect.left) / containerRect.width) * 100;
+                if (newLeftWidth < 20) newLeftWidth = 20;
+                if (newLeftWidth > 80) newLeftWidth = 80;
+                setLeftWidth(newLeftWidth);
+                };
+
+                const handleMouseUp = () => {
+                setIsDragging(false);
+                document.body.style.userSelect = 'auto';
+                };
+
+                if (isDragging) {
+                window.addEventListener('mousemove', handleMouseMove);
+                window.addEventListener('mouseup', handleMouseUp);
+                document.body.style.userSelect = 'none';
+                }
+
+                return () => {
+                window.removeEventListener('mousemove', handleMouseMove);
+                window.removeEventListener('mouseup', handleMouseUp);
+                };
+            }, [isDragging]);
+
+            const handleTextareaChange = (e) => {
+                const val = e.target.value;
+                const lines = val.split('\n');
+                if (lines.length > 0 && (lines[0].includes('http://') || lines[0].includes('https://'))) {
+                    setYoutubeUrlInput(lines[0].trim());
+                    setCsvText(lines.slice(1).join('\n').trim());
+                    addToast("Link terdeteksi dan dipindahkan ke Kotak Input!", "success");
+                } else {
+                    setCsvText(val);
+                }
+            };
+
+            const handleYoutubeLoad = async () => {
+                if (!youtubeUrlInput) { addToast("Isi link YouTube lu cuy!", "warning"); return; }
+                setIsFetchingUrl(true);
+                try {
+                    const res = await fetch('/api/load_video', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ url: youtubeUrlInput })
+                    });
+                    if (!res.ok) throw new Error("Gagal mendownload video full.");
+                    const data = await res.json();
+
+                    setVideoUrl(data.direct_url);
+                    setVideoIdHash(data.video_id);
+                    setVideoMeta({
+                        title: data.title,
+                        uploader: data.uploader,
+                        resolution: data.resolution,
+                        size_str: data.size_str,
+                        duration_str: data.duration_str
+                    });
+
+                    setFile(youtubeUrlInput);
+                    setCurrentView('editor');
+
+                    if (data.status === 'downloading') {
+                        setDownloadStatus('downloading');
+                        setDownloadProgress(0);
+                        addToast("Video & Transcript sedang didownload!", "info");
+                    } else if (data.status === 'done') {
+                        setDownloadStatus('done');
+                        setDownloadProgress(100);
+                        addToast("Memuat instan! Video sudah ada di server.", "success");
+                        loadHistory();
+                    }
+
+                    if (csvText.trim()) {
+                        setClips([]);
+                        setTimeout(() => {
+                            processCsvData(csvText);
+                        }, 800);
+                    } else {
+                        const randomNum = Math.floor(1000 + Math.random() * 9000);
+                        setClips([{
+                            id: generateId(),
+                            name: `1_KepKat_clip_${randomNum}`,
+                            ext: 'mp4', start: 0, end: 0, selected: true
+                        }]);
+                    }
+                } catch (err) {
+                    addToast('Server terblokir. Silahkan putuskan koneksi dan ganti runtime.', "error");
+                }
+                setIsFetchingUrl(false);
+            };
+
+            const loadFromHistory = (item) => {
+                const loadedUrl = item.original_url || `https://youtube.com/watch?v=${item.video_id}`;
+                setYoutubeUrlInput(loadedUrl);
+                setVideoIdHash(item.video_id);
+                setVideoUrl(`/static/raw_videos/${item.video_id}_proxy.mp4`);
+                setVideoMeta({
+                    title: item.title,
+                    uploader: item.uploader,
+                    resolution: item.resolution,
+                    size_str: item.size_str,
+                    duration_str: item.duration_str
+                });
+                setFile(loadedUrl);
+                setDownloadStatus('done');
+                setDownloadProgress(100);
+                setCurrentView('editor');
+
+                if (csvText.trim()) {
+                    setClips([]);
+                    setTimeout(() => {
+                        processCsvData(csvText);
+                    }, 500);
+                } else {
+                    const randomNum = Math.floor(1000 + Math.random() * 9000);
+                    setClips([{
+                        id: generateId(),
+                        name: `1_KepKat_clip_${randomNum}`,
+                        ext: 'mp4', start: 0, end: 0, selected: true
+                    }]);
+                }
+                addToast("Riwayat berhasil dimuat!", "success");
+            };
+
+            const handleTimeUpdate = () => {
+                if (videoRef.current) {
+                const current = videoRef.current.currentTime;
+                setCurrentTime(current);
+                if (previewingClipId && isPlaying) {
+                    const activeClip = clips.find(c => c.id === previewingClipId);
+                    if (activeClip && current >= activeClip.end) {
+                    videoRef.current.pause();
+                    setIsPlaying(false);
+                    setPreviewingClipId(null);
+                    }
+                }
+                }
+            };
+
+            const handleLoadedMetadata = () => {
+                if (videoRef.current) {
+                const vidDuration = videoRef.current.duration;
+                if (!isNaN(vidDuration) && isFinite(vidDuration)) {
+                    setDuration(vidDuration);
+                }
+                }
+            };
+
+            const togglePlay = () => {
+                if (videoRef.current) {
+                if (videoRef.current.paused) {
+                    videoRef.current.play();
+                    setIsPlaying(true);
+                } else {
+                    videoRef.current.pause();
+                    setIsPlaying(false);
+                }
+                }
+            };
+
+            useEffect(() => {
+                const handleKeyDown = (e) => {
+                if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT' || !videoRef.current || showCsvModal || showMyClipModal || showCropModal) return;
+
+                if (e.code === 'Space') {
+                    e.preventDefault();
+                    togglePlay();
+                } else if (e.code === 'ArrowRight') {
+                    e.preventDefault();
+                    videoRef.current.currentTime = Math.min(videoRef.current.duration, videoRef.current.currentTime + 1);
+                } else if (e.code === 'ArrowLeft') {
+                    e.preventDefault();
+                    videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime - 1);
+                }
+                };
+                window.addEventListener('keydown', handleKeyDown);
+                return () => window.removeEventListener('keydown', handleKeyDown);
+            }, [showCsvModal, showMyClipModal, showCropModal]);
+
+            const addClip = () => {
+                if (!file) return;
+                const randomNum = Math.floor(1000 + Math.random() * 9000);
+                const nextIndex = clips.length + 1;
+                setClips([
+                {
+                    id: generateId(),
+                    name: `${nextIndex}_KepKat_clip_${randomNum}`,
+                    ext: 'mp4',
+                    start: 0,
+                    end: 0,
+                    selected: true
+                },
+                ...clips
+                ]);
+            };
+
+            const processCsvData = (rawText) => {
+                if (!rawText.trim()) return;
+
+                const newClips = [];
+                let currentClips = [...clips];
+                let startingIndex = clips.length;
+
+                if (currentClips.length === 1 && currentClips[0].start === 0 && currentClips[0].end === 0) {
+                    currentClips = [];
+                    startingIndex = 0;
+                }
+
+                const parseTime = (timeStr) => {
+                    if (!timeStr) return NaN;
+                    const parts = timeStr.trim().split(':').map(Number);
+                    if (parts.some(isNaN)) return NaN;
+                    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+                    if (parts.length === 2) return parts[0] * 60 + parts[1];
+                    if (parts.length === 1) return parts[0];
+                    return NaN;
+                };
+
+                const segments = rawText.split('/');
+                segments.forEach((segment) => {
+                    if (!segment.trim()) return;
+                    const times = segment.split('-');
+                    if (times.length === 2) {
+                        let start = parseTime(times[0]);
+                        let end = parseTime(times[1]);
+                        if (!isNaN(start) && !isNaN(end)) {
+                            if (start < 0) start = 0;
+                            if (end > duration && duration > 0) end = duration;
+                            const randomNum = Math.floor(1000 + Math.random() * 9000);
+                            newClips.push({
+                                id: generateId(),
+                                name: `${startingIndex + 1}_KepKat_clip_${randomNum}`,
+                                ext: 'mp4', start: start, end: end, selected: true
+                            });
+                            startingIndex++;
+                        }
+                    }
+                });
+
+                if (newClips.length > 0) {
+                    setClips([...newClips, ...currentClips]);
+                    setShowCsvModal(false);
+                    setCsvText('');
+                    addToast(`Berhasil import ${newClips.length} klip dari CSV`, "success");
+                }
+            };
+
+            const copyPromptToClipboard = (e) => {
+                const promptText = `Kamu adalah AI Content Clipper Expert, Viral Content Strategist, Audience Analyst, Retention Specialist, Consumer Psychology Expert, CTR Specialist, Engagement Specialist, Social Media Growth Expert, dan Short Video Editor Profesional.
+
+Misi utama kamu adalah menemukan bagian paling viral dari sebuah video panjang berdasarkan FILE SUBTITLE / TRANSKRIP / LINK VIDEO YOUTUBE yang diberikan dan mengubahnya menjadi rekomendasi klip pendek dengan peluang tertinggi untuk menghasilkan:
+
+- Watch Time Tinggi
+- Audience Retention Tinggi
+- CTR Tinggi
+- Share Tinggi
+- Save Tinggi
+- Komentar Tinggi
+- Follow Tinggi
+- Engagement Tinggi
+- Potensi Viral Tinggi
+
+Kamu tidak bertugas mencari klip yang "cukup bagus".
+
+Kamu bertugas menemukan klip yang memiliki probabilitas tertinggi untuk meledak performanya di TikTok, YouTube Shorts, Instagram Reels, Facebook Reels, dan platform video pendek lainnya.
+
+==================================================
+
+INPUT
+
+FILE SUBTITLE / TRANSKRIP / LINK:
+(TRANSCRIPT SAYA LAMPIRKAN JIKA ADA, JIKA TIDAK ADA KAMU ANALISIS MELALUI LINK YG SAYA BERIKAN DI BAWAH)
+
+JUMLAH KLIP:
+${csvJumlahClip}
+
+RATA-RATA DURASI KLIP:
+${isNaN(parseInt(csvDurasiClip)) ? csvDurasiClip : csvDurasiClip + ' menit'}
+
+
+CATATAN TAMBAHAN:
+${csvCatatan || 'Tidak ada'}
+
+
+
+
+==================================================
+
+SUMBER ANALISIS
+
+Gunakan FILE SUBTITLE / TRANSKRIP / LINK VIDEO sebagai sumber utama analisis.
+
+Analisis seluruh VIDEO terlebih dahulu sebelum menentukan klip.
+
+Pahami keseluruhan konteks percakapan.
+
+Pahami hubungan antar topik.
+
+Pahami alur pembicaraan.
+
+Pahami bagian yang berpotensi menjadi hook.
+
+Pahami bagian yang berpotensi menciptakan retensi tinggi.
+
+==================================================
+
+ATURAN PRIORITAS UTAMA
+
+Tujuan utama adalah menemukan klip dengan potensi viral tertinggi.
+
+Cari bagian video yang memiliki salah satu atau beberapa karakteristik berikut:
+
+- Kalimat yang membuat orang berhenti scroll
+- Fakta mengejutkan
+- Pengakuan pribadi
+- Kesalahan fatal
+- Cerita sukses
+- Cerita gagal
+- Twist
+- Konflik
+- Kontroversi
+- Peluang besar
+- Ancaman besar
+- Kesimpulan mengejutkan
+- Pernyataan yang memancing komentar
+- Pernyataan yang memancing perdebatan
+- Pelajaran berharga
+- Momen emosional
+
+Pilih hanya klip yang memiliki peluang terbesar untuk:
+
+- Ditonton sampai selesai
+- Dibagikan
+- Dikomentari
+- Disimpan
+- Menghasilkan follower baru
+
+Prioritaskan:
+
+- Hook sangat kuat
+- Curiosity tinggi
+- Konflik tinggi
+- Emosi tinggi
+- Nilai tinggi
+- Retensi tinggi
+- Shareability tinggi
+
+Hindari:
+
+- Intro panjang
+- Outro
+- Pengulangan
+- Bagian lambat
+- Penjelasan yang tidak memiliki nilai viral
+
+
+ATURAN PEMOTONGAN KLIP
+
+- Jangan memulai klip di tengah kalimat.
+- Jangan mengakhiri klip di tengah kalimat.
+- Jangan memotong kata yang belum selesai.
+- Jangan memotong ide yang belum selesai.
+- Pastikan setiap klip memiliki awal, isi, dan akhir yang jelas.
+- Pastikan konteks tetap utuh.
+- Pastikan penonton dapat memahami klip tanpa melihat video penuh.
+- Jika sebuah ide penting belum selesai, perpanjang timestamp hingga selesai.
+- Utamakan kualitas klip dibanding durasi pendek.
+
+
+==================================================
+
+OUTPUT(langsung berikan timestamp tanpa basa basi apapun):
+
+
+Buat dalam format timestamp siap copy dalam SATU BARIS:
+
+HH:MM:SS-HH:MM:SS / HH:MM:SS-HH:MM:SS / HH:MM:SS-HH:MM:SS
+
+Contoh:
+
+00:12:14-00:13:02 / 00:21:08-00:22:17 / 00:35:11-00:36:29
+
+==================================================
+
+INPUT DATA
+
+LINK VIDEO : ${youtubeUrlInput}
+
+==================================================
+
+JUMLAH KLIP:
+${csvJumlahClip}
+
+RATA-RATA DURASI KLIP :
+${isNaN(parseInt(csvDurasiClip)) ? csvDurasiClip : csvDurasiClip + ' menit'}
+
+
+CATATAN TAMBAHAN:
+${csvCatatan || 'cari yang sangat berpotensi viral'}`;
+
+                navigator.clipboard.writeText(promptText);
+                addToast("Prompt Viral berhasil disalin! Silakan paste di Chat AI.", "success");
+
+                setIsPromptCopied(true);
+                setTimeout(() => setIsPromptCopied(false), 1500);
+            };
+
+            const downloadTranscriptDirect = async (e) => {
+                if (e) {
+                    const btn = e.currentTarget;
+                    btn.style.transform = 'scale(0.95)';
+                    setTimeout(() => btn.style.transform = '', 150);
+                }
+                if (!youtubeUrlInput || !(youtubeUrlInput.includes('http://') || youtubeUrlInput.includes('https://'))) {
+                    addToast("Isi link YouTube yang valid dulu!", "warning");
+                    return;
+                }
+                const btn = e.currentTarget;
+                const originalText = btn.innerText;
+                btn.innerText = "Mengambil...";
+                btn.disabled = true;
+
+                try {
+                    const res = await fetch('/api/fetch_transcript_direct', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ url: youtubeUrlInput })
+                    });
+                    if (!res.ok) throw new Error("Gagal");
+                    const data = await res.json();
+                    if (data.error) throw new Error(data.error);
+
+                    const blob = new Blob([data.text], { type: 'text/plain' });
+                    const blobUrl = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = blobUrl;
+                    a.download = `KepKat_Transcript.srt`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(blobUrl);
+                    addToast("Transcript berhasil didownload!", "success");
+                } catch(err) {
+                    addToast("Gagal mendownload transcript.", "error");
+                }
+                btn.innerText = originalText;
+                btn.disabled = false;
+            };
+
+            const downloadTranscript = async (e) => {
+                if (e) {
+                    const btn = e.currentTarget;
+                    btn.style.transform = 'scale(0.95)';
+                    setTimeout(() => btn.style.transform = '', 150);
+                }
+                if (!videoIdHash) {
+                    addToast("Load video terlebih dahulu!", "warning");
+                    return;
+                }
+                try {
+                    const res = await fetch(`/api/get_transcript/${videoIdHash}`);
+                    if (!res.ok) throw new Error("Gagal");
+                    const blob = await res.blob();
+
+                    if (blob.type === "application/json") {
+                        addToast("Transcript tidak ditemukan untuk video ini.", "warning");
+                        return;
+                    }
+
+                    const safeTitle = (videoMeta?.title || 'Video').replace(/[^a-zA-Z0-9_\- ]/g, '');
+                    const blobUrl = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = blobUrl;
+                    a.download = `KepKat - ${safeTitle}.srt`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(blobUrl);
+                    addToast("Transcript berhasil didownload!", "success");
+                } catch(err) {
+                    addToast("Gagal mendownload transcript.", "error");
+                }
+            };
+
+            const updateClip = (id, field, value) => {
+                setClips(clips.map(clip => clip.id === id ? { ...clip, [field]: value } : clip));
+            };
+
+            const removeClip = (id) => setClips(clips.filter(clip => clip.id !== id));
+            const toggleSelect = (id) => setClips(clips.map(clip => clip.id === id ? { ...clip, selected: !clip.selected } : clip));
+
+            const toggleSelectAll = () => {
+                const allSelected = clips.every(c => c.selected);
+                setClips(clips.map(clip => ({ ...clip, selected: !allSelected })));
+            };
+
+            const setClipTimeFromPlayer = (id, type) => {
+                if (!videoRef.current) return;
+                const time = Math.floor(videoRef.current.currentTime);
+                updateClip(id, type, time);
+            };
+
+            const playPreview = (clip) => {
+                if (videoRef.current) {
+                if (previewingClipId === clip.id) {
+                    if (!videoRef.current.paused) { videoRef.current.pause(); setIsPlaying(false); }
+                    else { videoRef.current.play(); setIsPlaying(true); }
+                } else {
+                    videoRef.current.currentTime = clip.start;
+                    videoRef.current.play();
+                    setIsPlaying(true);
+                    setPreviewingClipId(clip.id);
+                }
+                }
+            };
+
+            const processAndCutClips = async (clipsToProcess) => {
+                if (clipsToProcess.length === 0 || !videoIdHash) return;
+
+                if (downloadStatus === 'downloading') {
+                    addToast("Sabar cuy! Tunggu Download selesai dulu.", "warning");
+                    return;
+                }
+                if (downloadStatus === 'blocked') {
+                    addToast("Gagal! Server diblokir YouTube. Coba Restart Colab.", "error");
+                    return;
+                }
+                if (downloadStatus === 'error') {
+                    addToast("Video aslinya gagal di-download server.", "error");
+                    return;
+                }
+
+                setIsProcessing(true);
+                cancelRenderRef.current = false;
+                setTotalProcessCount(clipsToProcess.length);
+                setShowMyClipModal(true);
+
+                for (let i = 0; i < clipsToProcess.length; i++) {
+                    if (cancelRenderRef.current) break;
+
+                    const c = clipsToProcess[i];
+                    setCurrentProcessIndex(i + 1);
+                    setCurrentClipName(c.name);
+                    setProcessStatus(`Memotong klip ${i + 1} dari ${clipsToProcess.length}...`);
+                    setProcessProgress(0);
+
+                    // ====== JEMBATAN PENGIRIMAN DATA EDITAN UI KE SERVER ======
+                    let advancedCropData = null;
+                    try {
+                        const cachedStr = localStorage.getItem(`crop_edit_data_${c.id}`);
+                        if (cachedStr) {
+                            advancedCropData = JSON.parse(cachedStr);
+                        }
+                    } catch(e) {}
+                    // ==========================================================
+
+                    const progressInterval = setInterval(async () => {
+                        try {
+                            const progRes = await fetch(`/api/cut_progress/${c.id}`);
+                            const progData = await progRes.json();
+                            if(progData.progress !== undefined) {
+                                setProcessProgress(progData.progress);
+                            }
+                        } catch(e) {}
+                    }, 500);
+
+                    try {
+                        const res = await fetch('/api/cut_single', {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                video_id: videoIdHash,
+                                start: c.start,
+                                end: c.end,
+                                name: c.name,
+                                quality: globalQuality,
+                                ratio: globalRatio,
+                                clip_id: c.id.toString(),
+                                gpu_mode: isGpuMode,
+                                engine_speed: engineSpeed,
+                                crop_data: advancedCropData // <--- Data editan masuk ke sini
+                            })
+                        });
+                        clearInterval(progressInterval);
+                        if (!res.ok) throw new Error("Gagal potong");
+
+                        setProcessProgress(100);
+                        await loadSavedClips();
+                        await new Promise(r => setTimeout(r, 400));
+                    } catch (err) {
+                        clearInterval(progressInterval);
+                        if (cancelRenderRef.current) {
+                            console.log("Proses dibatalkan.");
+                            break;
+                        }
+                        console.error("Error potong klip", err);
+                    }
+                }
+
+                if (cancelRenderRef.current) {
+                    setProcessStatus('Proses Dibatalkan!');
+                    setTimeout(() => { setIsProcessing(false); }, 1500);
+                } else {
+                    setProcessProgress(100);
+                    setProcessStatus('Kelar Cuy! Semua klip udah dipotong.');
+                    setTimeout(() => {
+                        setIsProcessing(false);
+                        addToast("Kelar Cuy! Proses potong udah beres.", "success");
+                    }, 1000);
+                }
+            };
+
+            const handlePotongSelected = () => { const selectedClips = clips.filter(c => c.selected); processAndCutClips(selectedClips); };
+            const handleHapusTerpilih = () => setClips(clips.filter(c => !c.selected));
+
+            const handleEditTerpilih = () => {
+                const selected = clips.filter(c => c.selected);
+                if (selected.length > 0) {
+                    setEditingClips(selected);
+                    setShowCropModal(true);
+                }
+            };
+
+            const toggleMyClipSelect = (id) => {
+                setSelectedMyClips(prev => prev.includes(id) ? prev.filter(cId => cId !== id) : [...prev, id]);
+            };
+
+            const isAllMyClipsSelected = cutClips.length > 0 && selectedMyClips.length === cutClips.length;
+            const handleToggleAllMyClips = () => {
+                if (isAllMyClipsSelected) {
+                    setSelectedMyClips([]);
+                } else {
+                    setSelectedMyClips(cutClips.map(c => c.id));
+                }
+            };
+
+            const deleteMyClips = async (clipIdsToDelete) => {
+                if(clipIdsToDelete.length === 0) return;
+                const urlsToDelete = cutClips.filter(c => clipIdsToDelete.includes(c.id)).map(c => c.url);
+
+                try {
+                    await fetch('/api/delete_clips', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ urls: urlsToDelete })
+                    });
+
+                    setCutClips(prev => prev.filter(c => !clipIdsToDelete.includes(c.id)));
+                    setSelectedMyClips(prev => prev.filter(id => !clipIdsToDelete.includes(id)));
+                    addToast("Klip berhasil dihapus dari server.", "success");
+                } catch(e) {
+                    addToast("Gagal menghapus klip.", "error");
+                }
+            };
+
+            const cancelDownload = (clipId, e) => {
+                e.stopPropagation();
+                if (abortControllersRef.current[clipId]) {
+                    abortControllersRef.current[clipId].abort();
+                    delete abortControllersRef.current[clipId];
+                }
+                setClipDownloadProgresses(prev => { const newProg = {...prev}; delete newProg[clipId]; return newProg; });
+            };
+
+            const downloadSingleWithProgress = async (clipId, url, filename) => {
+                if (clipDownloadProgresses[clipId] !== undefined) return;
+                setClipDownloadProgresses(prev => ({...prev, [clipId]: 0}));
+
+                const controller = new AbortController();
+                abortControllersRef.current[clipId] = controller;
+
+                try {
+                    const response = await fetch(url, { signal: controller.signal });
+                    if (!response.ok) throw new Error("Network response was not ok");
+
+                    const contentLength = response.headers.get('content-length');
+                    const total = contentLength ? parseInt(contentLength, 10) : 0;
+                    let loaded = 0;
+
+                    const reader = response.body.getReader();
+                    const chunks = [];
+
+                    while (true) {
+                        const {done, value} = await reader.read();
+                        if (done) break;
+                        chunks.push(value);
+                        loaded += value.length;
+                        if (total) {
+                            setClipDownloadProgresses(prev => ({...prev, [clipId]: (loaded/total)*100}));
+                        }
+                    }
+
+                    const blob = new Blob(chunks, { type: 'video/mp4' });
+                    const blobUrl = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = blobUrl;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(blobUrl);
+
+                    setTimeout(() => {
+                        setClipDownloadProgresses(prev => {
+                            const newProg = {...prev};
+                            delete newProg[clipId];
+                            return newProg;
+                        });
+                        delete abortControllersRef.current[clipId];
+                    }, 500);
+                } catch (err) {
+                    if (err.name === 'AbortError') {
+                        addToast("Download dibatalkan.", "warning");
+                    } else {
+                        addToast("Gagal download video.", "error");
+                    }
+                    setClipDownloadProgresses(prev => { const newProg = {...prev}; delete newProg[clipId]; return newProg; });
+                    delete abortControllersRef.current[clipId];
+                }
+            };
+
+            const downloadSelectedMyClips = async () => {
+                if(selectedMyClips.length === 0) return;
+                const clipsToDownload = cutClips.filter(c => selectedMyClips.includes(c.id));
+
+                clipsToDownload.forEach(c => {
+                    const fname = c.name.endsWith('.mp4') ? c.name : c.name + '.mp4';
+                    downloadSingleWithProgress(c.id, c.url, fname);
+                });
+            };
+
+            const getAspectRatioStyle = () => {
+                if (globalRatio === '16:9') return { aspectRatio: '16/9' };
+                if (globalRatio === '9:16') return { aspectRatio: '9/16' };
+                if (globalRatio === '1:1') return { aspectRatio: '1/1' };
+                if (globalRatio === '3:4') return { aspectRatio: '3/4' };
+                if (globalRatio === '4:3') return { aspectRatio: '4/3' };
+                return { aspectRatio: 'auto' };
+            };
+
+            const appProps = {
+                appTheme, setAppTheme, cycleTheme,
+                currentView, setCurrentView,
+                toasts, setToasts, removeToast, addToast, clearAllToasts,
+                isServerOnline, setIsServerOnline,
+                downloadStatus, setDownloadStatus, downloadProgress, setDownloadProgress,
+                isGpuMode, setIsGpuMode, toggleGpuMode,
+                isPromptCopied, setIsPromptCopied,
+                file, setFile,
+                youtubeUrlInput, setYoutubeUrlInput,
+                isFetchingUrl, setIsFetchingUrl,
+                videoUrl, setVideoUrl, videoIdHash, setVideoIdHash, videoMeta, setVideoMeta,
+                duration, setDuration, currentTime, setCurrentTime, isPlaying, setIsPlaying, videoRef,
+                globalRatio, setGlobalRatio, globalQuality, setGlobalQuality, engineSpeed, setEngineSpeed,
+                clips, _setClips, setClips, pastClips, setPastClips, futureClips, setFutureClips, handleUndo, handleRedo,
+                showCropModal, setShowCropModal, editingClips, setEditingClips,
+                previewingClipId, setPreviewingClipId,
+                cutClips, setCutClips, showMyClipModal, setShowMyClipModal, selectedMyClips, setSelectedMyClips,
+                abortControllersRef, clipDownloadProgresses, setClipDownloadProgresses,
+                isProcessing, setIsProcessing, processProgress, setProcessProgress, processStatus, setProcessStatus,
+                currentProcessIndex, setCurrentProcessIndex, totalProcessCount, setTotalProcessCount, currentClipName, setCurrentClipName,
+                showCsvModal, setShowCsvModal, csvText, setCsvText, csvJumlahClip, setCsvJumlahClip, csvDurasiClip, setCsvDurasiClip, csvCatatan, setCsvCatatan,
+                history, setHistory,
+                isMiniPlayer, setIsMiniPlayer, miniPos, setMiniPos,
+                sholatReminder, setSholatReminder, isGeneratingReminder, setIsGeneratingReminder, isReading, setIsReading,
+                leftWidth, setLeftWidth, isDragging, setIsDragging,
+                containerRef, cancelRenderRef,
+                loadSavedClips, loadHistory, handleDragStart, handleSeekAndExtend, generateSholatReminder, readAloud,
+                handleTextareaChange, handleYoutubeLoad, loadFromHistory, handleTimeUpdate, handleLoadedMetadata, togglePlay,
+                addClip, processCsvData, copyPromptToClipboard, downloadTranscriptDirect, downloadTranscript,
+                updateClip, removeClip, toggleSelect, toggleSelectAll, setClipTimeFromPlayer, playPreview,
+                processAndCutClips, handlePotongSelected, handleHapusTerpilih, handleEditTerpilih,
+                toggleMyClipSelect, isAllMyClipsSelected, handleToggleAllMyClips, deleteMyClips, cancelDownload,
+                downloadSingleWithProgress, downloadSelectedMyClips, getAspectRatioStyle
+            };
+
+            return (
+                <div data-theme={appTheme} className="min-h-screen md:h-screen flex flex-col bg-[#000000] text-zinc-100 font-sans selection:bg-yellow-500/30 overflow-x-hidden md:overflow-hidden relative transition-colors duration-500">
+
+                {/* TOAST SYSTEM CONTAINER */}
+                <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[99999] flex flex-col gap-2 pointer-events-none items-center">
+                    {toasts.length > 1 && (
+                        <button onClick={clearAllToasts} className="pointer-events-auto bg-zinc-800/90 text-zinc-300 text-[10px] font-bold uppercase tracking-wider px-4 py-1.5 rounded-full cursor-pointer hover:text-white hover:bg-zinc-700 mb-1 shadow-lg border border-zinc-700 transition-all active:scale-95">Tutup Semua Notifikasi</button>
+                    )}
+                    {toasts.map(t => (
+                        <div key={t.id} className={t.exiting ? "toast-exit" : "toast-enter"} onClick={() => clearAllToasts()}>
+                            <ToastItem t={t} removeToast={removeToast} />
+                        </div>
+                    ))}
+                </div>
+
+                <header className="sticky top-0 w-full h-12 bg-zinc-950 border-b border-zinc-800/50 px-4 flex justify-between items-center z-[999] shrink-0 shadow-md">
+                    <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-3 text-left group transition-all">
+                            <img src="LOGO_PANJANG_PLACEHOLDER" alt="KepKat Logo" onClick={cycleTheme} className="h-7 object-contain drop-shadow-[0_0_8px_rgba(234,179,8,0.3)] group-hover:scale-105 transition-all cursor-pointer" title="Klik untuk ganti tema!" />
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 sm:gap-3">
+                        <div className="flex items-center gap-2 bg-zinc-900/80 px-2 py-1.5 rounded-lg border border-zinc-800/50">
+                            <div className={`w-2 h-2 rounded-full ${isServerOnline ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-red-500 shadow-[0_0_8px_#ef4444] animate-pulse'}`}></div>
+                            <span className={`text-[9px] font-bold uppercase tracking-wider ${isServerOnline ? 'text-green-500' : 'text-red-500'}`}>{isServerOnline ? 'Server Online' : 'Server Offline'}</span>
+                        </div>
+                    </div>
+                </header>
+
+                <div ref={containerRef} className="flex-1 flex flex-col md:flex-row relative w-full min-h-0">
+                    <HalamanBeranda {...appProps} />
+                    <HalamanPotongKlip {...appProps} />
+                    <HalamanPreviewKlip {...appProps} />
+                    <HalamanEditKlip {...appProps} />
+                </div>
+
+                <HalamanMyClips {...appProps} />
+
+                </div>
+            );
+        }
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
+"""
+
+def compile_kepkat_ui():
+    html_out = core_html_template.replace("FAVICON_PLACEHOLDER", b64_kotak)
+    html_out = html_out.replace("LOGO_PANJANG_PLACEHOLDER", b64_panjang)
+
+    ordered_files = [
+        "static/pages/beranda.jsx",
+        "static/pages/myclips.jsx",
+        "static/pages/potong_klip.jsx",
+        "static/pages/preview_klip.jsx",
+        "static/pages/edit_klip.jsx"
+    ]
+    extra_files = sorted(glob.glob("static/pages/*.jsx"))
+    for ef in extra_files:
+        norm_ef = ef.replace("\\", "/")
+        if norm_ef not in ordered_files:
+            ordered_files.append(norm_ef)
+
+    combined_pages = []
+    loaded_names = []
+    for pf in ordered_files:
+        if os.path.exists(pf):
+            with open(pf, "r", encoding="utf-8") as f:
+                combined_pages.append(f"// === FILE: {pf} ===\n" + f.read())
+            loaded_names.append(os.path.basename(pf))
+
+    all_code_str = "\n\n".join(combined_pages)
+    for comp_name in ["HalamanBeranda", "HalamanMyClips", "HalamanPotongKlip", "HalamanPreviewKlip", "HalamanEditKlip", "CropModal"]:
+        if f"const {comp_name}" not in all_code_str and f"function {comp_name}" not in all_code_str:
+            all_code_str += f"\nconst {comp_name} = () => null;"
+
+    html_out = html_out.replace("// --- INJEKSI_SEMUA_HALAMAN_DI_SINI ---", all_code_str)
+
+    with open("static/index.html", "w", encoding="utf-8") as f:
+        f.write(html_out)
+    print(f"📦 Halaman tergabung ({len(loaded_names)}): {', '.join(loaded_names)}")
+
+compile_kepkat_ui()
+print("✅ CELL 6 (Kerangka Induk & Compiler) berhasil menyatukan semua halaman ke static/index.html!")
