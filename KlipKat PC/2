@@ -1,0 +1,175 @@
+# @title CELL 2: HALAMAN MYCLIPS
+# ==============================================================================
+import os
+os.makedirs("static/pages", exist_ok=True)
+
+myclips_code = r"""
+const HalamanMyClips = ({
+    showMyClipModal,
+    setShowMyClipModal,
+    cutClips,
+    setCutClips,
+    loadSavedClips,
+    selectedMyClips,
+    deleteMyClips,
+    handleToggleAllMyClips,
+    isAllMyClipsSelected,
+    downloadSelectedMyClips,
+    isProcessing,
+    setIsProcessing,
+    isGpuMode,
+    currentProcessIndex,
+    totalProcessCount,
+    processProgress,
+    currentClipName,
+    processStatus,
+    cancelRenderRef,
+    addToast,
+    clipDownloadProgresses,
+    toggleMyClipSelect,
+    cancelDownload,
+    downloadSingleWithProgress
+}) => {
+    return (
+        /* MODAL MY CLIP GRID (KINI PUNYA Z-INDEX PALING TINGGI: z-[15000]) */
+        <div className={`fixed inset-0 w-full h-full z-[15000] flex flex-col bg-[#000000]/95 backdrop-blur-sm transition-all duration-300 ${showMyClipModal ? 'opacity-100 visible' : 'opacity-0 invisible pointer-events-none'}`}>
+            <div className="flex justify-between items-center p-2.5 sm:px-4 border-b border-zinc-800/50 bg-zinc-950/90 shrink-0">
+                <h2 className="text-sm font-black text-yellow-400 flex items-center gap-1.5">
+                    <LayoutGrid size={16} /> My Clips ({cutClips.length})
+                </h2>
+                <div className="flex gap-1.5 items-center">
+
+                    <button onClick={loadSavedClips} className="p-1.5 rounded text-zinc-500 hover:text-yellow-400 hover:bg-zinc-800 transition-transform active:scale-95" title="Refresh">
+                        <RefreshCw size={14} />
+                    </button>
+
+                    {selectedMyClips.length > 0 && (
+                        <button onClick={() => deleteMyClips(selectedMyClips)} className="px-2 py-1.5 rounded text-red-400 hover:text-white hover:bg-red-900/50 transition-transform active:scale-95 flex items-center gap-1">
+                            <Trash2 size={12} />
+                            <span className="text-[9px] font-bold">({selectedMyClips.length})</span>
+                        </button>
+                    )}
+
+                    <button onClick={handleToggleAllMyClips} className="p-1.5 rounded text-zinc-500 hover:text-yellow-400 hover:bg-zinc-800 transition-transform active:scale-95" title="Pilih Semua">
+                        {isAllMyClipsSelected ? <CheckSquare size={14} className="text-yellow-400" /> : <Square size={14} />}
+                    </button>
+
+                    {selectedMyClips.length > 0 && (
+                        <button onClick={downloadSelectedMyClips} disabled={isProcessing} className="px-2 py-1.5 rounded text-[9px] font-black uppercase tracking-wider bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 text-black transition-transform active:scale-95 flex items-center gap-1">
+                            <Download size={12} /> <span className="hidden sm:inline">Down</span>
+                        </button>
+                    )}
+
+                    <button onClick={() => setShowMyClipModal(false)} className="p-1.5 rounded text-zinc-500 hover:text-white transition-transform active:scale-90 ml-1">
+                        <X size={18} />
+                    </button>
+                </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-2 sm:p-4 custom-scrollbar">
+                <div className="columns-2 md:columns-3 lg:columns-4 gap-2 space-y-2 items-start">
+
+                    {/* KOTAK KLIP YANG SEDANG DI PROSES (MUNCUL SAAT RENDER SAJA) */}
+                    {isProcessing && (
+                        <div className="break-inside-avoid relative bg-[#000000] rounded-lg overflow-hidden border border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.3)] p-3 flex flex-col gap-3 justify-center min-h-[140px] mb-2 z-10">
+                            <div className="flex justify-between items-center border-b border-zinc-800/50 pb-1">
+                                <span className="text-[10px] font-bold text-yellow-500 flex items-center gap-1.5">
+                                    {isGpuMode ? <Flame size={14} className="animate-pulse" /> : <Scissors size={14} className="animate-pulse" />}
+                                    Klip {currentProcessIndex}/{totalProcessCount}
+                                </span>
+                                <span className="text-[10px] font-black text-yellow-500">{Math.round(processProgress)}%</span>
+                            </div>
+                            <span className="text-[9px] font-mono text-zinc-300 truncate bg-zinc-900/50 p-1.5 rounded border border-zinc-800">{currentClipName}</span>
+                            <div className="w-full bg-zinc-900 rounded-full h-1.5 overflow-hidden border border-zinc-800">
+                                <div className="bg-yellow-500 h-1.5 rounded-full transition-all duration-300" style={{ width: `${processProgress}%` }}></div>
+                            </div>
+                            <div className="flex justify-between items-center mt-1">
+                                <span className="text-[8px] font-bold text-zinc-500 uppercase tracking-wider">{processStatus}</span>
+                                <button onClick={async () => {
+                                    cancelRenderRef.current = true;
+                                    try { await fetch('/api/cancel_cut', {method: 'POST'}); } catch(e) {}
+                                    setIsProcessing(false);
+                                    addToast("Dibatalkan.", "warning");
+                                }} className="px-2 py-1 rounded bg-red-600/90 hover:bg-red-500 text-white text-[9px] font-bold uppercase transition-transform active:scale-95 flex items-center gap-1 border border-red-500">
+                                    <X size={10} /> Batal
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {cutClips.length === 0 && !isProcessing && (
+                        <div className="h-full flex flex-col items-center justify-center text-zinc-600 col-span-full pt-10">
+                            <Scissors size={32} className="mb-2 opacity-30" />
+                            <p className="text-xs font-bold tracking-tight">Belum ada klip.</p>
+                        </div>
+                    )}
+
+                    {cutClips.map(c => {
+                        const dlProgress = clipDownloadProgresses[c.id];
+                        const isSelected = selectedMyClips.includes(c.id);
+                        return (
+                            <div key={c.id} className={`break-inside-avoid relative bg-zinc-900/40 rounded-lg overflow-hidden border transition-all duration-300 group ${isSelected ? 'border-yellow-500 shadow-[0_0_10px_rgba(234,179,8,0.2)]' : 'border-zinc-800/80 hover:border-yellow-500/50'}`}>
+                                <button onClick={(e) => { e.stopPropagation(); deleteMyClips([c.id]); }} className="absolute top-1.5 right-1.5 z-10 p-1.5 rounded bg-black/60 text-zinc-400 hover:text-red-500 transition-transform active:scale-90 opacity-0 group-hover:opacity-100">
+                                    <Trash2 size={12} />
+                                </button>
+
+                                <video src={c.url} controls preload="metadata" className="w-full object-cover" />
+
+                                <div className="p-2 bg-zinc-950/80 cursor-pointer flex flex-col gap-1.5" onClick={() => toggleMyClipSelect(c.id)}>
+                                    <input
+                                        type="text"
+                                        value={c.name}
+                                        onChange={(e) => {
+                                            const newName = e.target.value;
+                                            setCutClips(prev => prev.map(clip => clip.id === c.id ? {...clip, name: newName} : clip));
+                                        }}
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="w-full bg-transparent border-b border-zinc-800 focus:border-yellow-500 px-1 py-0.5 text-[9px] font-medium text-zinc-300 outline-none transition-colors"
+                                        title="Ubah nama"
+                                    />
+                                    <div className="flex justify-between items-center relative gap-1 flex-wrap">
+                                        <div className="flex items-center text-zinc-500 group-hover:text-yellow-500 transition-colors">
+                                            {isSelected ? <CheckCircle2 size={14} className="text-yellow-500" /> : <Square size={14} />}
+                                        </div>
+
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="text-[8px] font-mono text-zinc-500">{c.size}</span>
+                                            {dlProgress !== undefined ? (
+                                                <button onClick={(e) => cancelDownload(c.id, e)} className="p-1 rounded bg-red-900/80 text-red-200 transition-transform active:scale-90">
+                                                    <X size={10} />
+                                                </button>
+                                            ) : (
+                                                <button onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    const fname = c.name.endsWith('.mp4') ? c.name : c.name + '.mp4';
+                                                    downloadSingleWithProgress(c.id, c.url, fname);
+                                                }} className="p-1 rounded bg-zinc-800 hover:bg-yellow-500 hover:text-black text-zinc-400 transition-transform active:scale-90">
+                                                    <Download size={10} />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* LOADING BAR DOWNLOAD KLIP */}
+                                    {dlProgress !== undefined && (
+                                        <div className="w-full bg-zinc-800 rounded-full h-1 overflow-hidden mt-0.5">
+                                            <div className="bg-yellow-500 h-1 rounded-full transition-all duration-200" style={{ width: `${dlProgress}%` }}></div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )
+                    })}
+                </div>
+            </div>
+        </div>
+    );
+};
+"""
+
+with open("static/pages/myclips.jsx", "w", encoding="utf-8") as f:
+    f.write(myclips_code.strip())
+
+if "compile_kepkat_ui" in globals():
+    compile_kepkat_ui()
+print("✅ CELL 2 (Halaman MyClips) berhasil disimpan!")
