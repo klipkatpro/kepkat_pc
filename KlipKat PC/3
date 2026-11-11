@@ -1,0 +1,137 @@
+# @title CELL 3: HALAMAN POTONG KLIP (INPUT LINK & PROMPT VIRAL)
+# ==============================================================================
+import os
+os.makedirs("static/pages", exist_ok=True)
+
+potong_klip_code = r"""
+const HalamanPotongKlip = ({
+    currentView,
+    setCurrentView,
+    youtubeUrlInput,
+    setYoutubeUrlInput,
+    csvJumlahClip,
+    setCsvJumlahClip,
+    csvDurasiClip,
+    setCsvDurasiClip,
+    csvCatatan,
+    setCsvCatatan,
+    copyPromptToClipboard,
+    isPromptCopied,
+    downloadTranscriptDirect,
+    csvText,
+    handleTextareaChange,
+    handleYoutubeLoad,
+    isFetchingUrl
+}) => {
+    if (currentView !== 'form') return null;
+
+    return (
+        // FORM SECTION (Auto Prompt Area) - Gaya Modal Bersih
+        <div className="fixed inset-0 w-full h-full z-[10000] flex flex-col bg-[#000000]/95 backdrop-blur-sm overflow-hidden">
+
+            {/* Header */}
+            <div className="flex justify-between items-center p-3 border-b border-zinc-800/80 bg-zinc-950 shrink-0">
+                <h2 className="text-sm font-black text-yellow-500 flex items-center gap-1.5">
+                    Prompt Viral
+                </h2>
+                <button onClick={() => setCurrentView('home')} className="p-1 text-zinc-500 hover:text-white transition-transform active:scale-90" title="Kembali ke Beranda">
+                    <X size={18} />
+                </button>
+            </div>
+
+            {/* Konten Scrollable */}
+            <div className="flex-1 overflow-y-auto p-4 custom-scrollbar flex flex-col gap-5">
+
+                {/* Link Input */}
+                <div className="flex flex-col gap-1 border-b border-zinc-800 pb-1">
+                    <div className="flex justify-between items-center">
+                        <label className="text-[10px] font-bold text-zinc-400">Link Video YouTube</label>
+                        <button onClick={() => setYoutubeUrlInput('')} className="text-[8px] text-zinc-500 hover:text-yellow-500 uppercase font-bold transition-colors">Clear</button>
+                    </div>
+                    <input type="text" value={youtubeUrlInput} onChange={(e) => setYoutubeUrlInput(e.target.value)} className="w-full bg-transparent text-xs text-zinc-200 outline-none placeholder-zinc-600" placeholder="https://www.youtube.com/watch?v=..." />
+                </div>
+
+                {/* Params */}
+                <div className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-1 border-b border-zinc-800 pb-1">
+                        <div className="flex justify-between items-center">
+                            <label className="text-[10px] font-bold text-zinc-400">Jumlah Klip</label>
+                            <button onClick={() => setCsvJumlahClip('')} className="text-[8px] text-zinc-500 hover:text-yellow-500 uppercase font-bold transition-colors">Clear</button>
+                        </div>
+                        <input type="text" value={csvJumlahClip} onChange={(e) => setCsvJumlahClip(e.target.value)} className="w-full bg-transparent text-xs text-zinc-200 outline-none placeholder-zinc-600" placeholder="Contoh: 10" />
+                    </div>
+                    <div className="flex flex-col gap-1 border-b border-zinc-800 pb-1">
+                        <div className="flex justify-between items-center">
+                            <label className="text-[10px] font-bold text-zinc-400">Durasi (Menit)</label>
+                            <button onClick={() => setCsvDurasiClip('')} className="text-[8px] text-zinc-500 hover:text-yellow-500 uppercase font-bold transition-colors">Clear</button>
+                        </div>
+                        <input type="text" value={csvDurasiClip} onChange={(e) => setCsvDurasiClip(e.target.value)} className="w-full bg-transparent text-xs text-zinc-200 outline-none placeholder-zinc-600" placeholder="Contoh: 1" />
+                    </div>
+                    <div className="flex flex-col gap-1 border-b border-zinc-800 pb-1">
+                        <div className="flex justify-between items-center">
+                            <label className="text-[10px] font-bold text-zinc-400">Catatan Khusus</label>
+                            <button onClick={() => setCsvCatatan('')} className="text-[8px] text-zinc-500 hover:text-yellow-500 uppercase font-bold transition-colors">Clear</button>
+                        </div>
+                        <input type="text" value={csvCatatan} onChange={(e) => setCsvCatatan(e.target.value)} className="w-full bg-transparent text-xs text-zinc-200 outline-none placeholder-zinc-600" placeholder="Cari momen lucu..." />
+                    </div>
+                </div>
+
+                {/* Tombol Prompt & Transkrip */}
+                <div className="flex gap-2">
+                    <button onClick={copyPromptToClipboard} className="flex-1 py-2.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-yellow-500 text-black transition-transform active:scale-95 text-center">
+                        {isPromptCopied ? "Tersalin!" : "Salin Prompt"}
+                    </button>
+                    <button onClick={downloadTranscriptDirect} className="flex-1 py-2.5 rounded-md text-[10px] font-bold uppercase tracking-wider border border-zinc-700 text-zinc-300 transition-transform active:scale-95 text-center">
+                        Down Transcript
+                    </button>
+                </div>
+
+                {/* Link AI */}
+                <div className="flex flex-col gap-1.5">
+                    <span className="text-[8px] text-zinc-500 font-bold uppercase text-center">Lanjut ke AI</span>
+                    <div className="flex justify-center gap-3 text-[10px] font-bold">
+                        <a href="https://chatgpt.com/" target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-yellow-400 underline decoration-zinc-700 underline-offset-4">ChatGPT</a>
+                        <a href="https://gemini.google.com/" target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-yellow-400 underline decoration-zinc-700 underline-offset-4">Gemini</a>
+                        <a href="https://claude.ai/" target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-yellow-400 underline decoration-zinc-700 underline-offset-4">Claude</a>
+                    </div>
+                    <p className="text-[8px] text-zinc-500 mt-1 text-center">Catatan: Selain AI Gemini wajib menyisipkan file transcriptnya.</p>
+                </div>
+
+                <hr className="border-zinc-800" />
+
+                {/* Area Paste AI */}
+                <div className="flex flex-col flex-1 min-h-[150px]">
+                    <label className="text-[10px] font-bold text-yellow-500 mb-2 uppercase tracking-wider">Paste Hasil AI di sini (Format: 00:00-00:00 / 00:00-00:00)</label>
+                    <textarea value={csvText} onChange={handleTextareaChange} placeholder="Paste timestamp di sini... (Jika baris pertama link, otomatis pindah ke atas)" className="flex-1 w-full bg-zinc-900/50 border border-zinc-800 focus:border-yellow-500 rounded-lg p-3 text-[10px] font-mono text-zinc-300 outline-none transition-all resize-none custom-scrollbar" />
+                </div>
+            </div>
+
+            {/* Tombol Eksekusi */}
+            <div className="p-3 border-t border-zinc-800/80 bg-zinc-950 shrink-0">
+                <button
+                    onClick={handleYoutubeLoad}
+                    disabled={isFetchingUrl}
+                    className={`w-full py-3 rounded-lg text-[11px] font-black uppercase tracking-widest transition-transform flex items-center justify-center gap-1.5 ${
+                        isFetchingUrl
+                        ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700'
+                        : 'bg-yellow-500 text-black active:scale-95'
+                    }`}
+                >
+                    {isFetchingUrl ? (
+                        <><RefreshCw size={14} className="animate-spin" /> Memproses...</>
+                    ) : (
+                        <><Scissors size={14} /> Eksekusi Potongan</>
+                    )}
+                </button>
+            </div>
+        </div>
+    );
+};
+"""
+
+with open("static/pages/potong_klip.jsx", "w", encoding="utf-8") as f:
+    f.write(potong_klip_code.strip())
+
+if "compile_kepkat_ui" in globals():
+    compile_kepkat_ui()
+print("✅ CELL 3 (Halaman Potong Klip) berhasil disimpan!")
