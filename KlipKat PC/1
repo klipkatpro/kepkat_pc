@@ -1,1 +1,88 @@
 
+# @title CELL 1: HALAMAN BERANDA
+# ==============================================================================
+import os
+os.makedirs("static/pages", exist_ok=True)
+
+beranda_code = r"""
+const HalamanBeranda = ({
+    currentView,
+    setCurrentView,
+    setShowMyClipModal,
+    history,
+    loadFromHistory
+}) => {
+    if (currentView !== 'home' && currentView !== 'form') return null;
+
+    return (
+        // BERANDA SECTION
+        <div className="w-full h-full overflow-y-auto p-4 sm:p-8 flex flex-col items-center custom-scrollbar">
+           <div className="w-full max-w-4xl flex flex-col gap-10 mt-4 sm:mt-10">
+               {/* Welcome Hero / Menu */}
+               <div className="flex flex-col md:flex-row gap-6 justify-center w-full">
+                    <button onClick={() => setCurrentView('form')} className="flex-1 bg-gradient-to-br from-zinc-900 to-black border border-zinc-800 hover:border-yellow-500 p-8 rounded-2xl flex flex-col items-center justify-center gap-4 transition-all hover:-translate-y-1 hover:shadow-[0_10px_30px_rgba(234,179,8,0.1)] group">
+                        <div className="w-16 h-16 rounded-full bg-yellow-500/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                            <Scissors size={28} className="text-yellow-500" />
+                        </div>
+                        <div className="text-center">
+                            <h3 className="text-lg font-black tracking-wide text-zinc-200 group-hover:text-yellow-400 transition-colors">Potong Video Baru</h3>
+                            <p className="text-xs text-zinc-500 mt-2 font-medium">Input link untuk analisa momen viral dengan AI</p>
+                        </div>
+                    </button>
+                    <button onClick={() => setShowMyClipModal(true)} className="flex-1 bg-gradient-to-br from-zinc-900 to-black border border-zinc-800 hover:border-yellow-500 p-8 rounded-2xl flex flex-col items-center justify-center gap-4 transition-all hover:-translate-y-1 hover:shadow-[0_10px_30px_rgba(234,179,8,0.1)] group">
+                        <div className="w-16 h-16 rounded-full bg-yellow-500/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                            <LayoutGrid size={28} className="text-yellow-500" />
+                        </div>
+                        <div className="text-center">
+                            <h3 className="text-lg font-black tracking-wide text-zinc-200 group-hover:text-yellow-400 transition-colors">Koleksi My Clip</h3>
+                            <p className="text-xs text-zinc-500 mt-2 font-medium">Lihat dan download klip yang sudah dipotong</p>
+                        </div>
+                    </button>
+               </div>
+
+               {/* PROJEK (Riwayat) List Non-Card Minimalist */}
+               {history.length > 0 && (
+                   <div className="w-full bg-gradient-to-b from-zinc-900/40 to-transparent border-t border-zinc-800/80 mt-2 pt-6 flex flex-col rounded-b-2xl">
+                        <div className="flex items-center gap-3 mb-4 px-2">
+                            <div className="w-8 h-8 rounded-full bg-yellow-500/10 flex items-center justify-center">
+                                <Clock size={16} className="text-yellow-500" />
+                            </div>
+                            <h3 className="text-sm font-black text-zinc-300 uppercase tracking-widest">Projek</h3>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                            {history.map((item, idx) => (
+                                <div key={idx} onClick={() => loadFromHistory(item)} className="flex items-center justify-between p-4 rounded-xl hover:bg-zinc-900/60 border border-transparent hover:border-zinc-800 transition-all cursor-pointer group">
+                                    <div className="flex items-center gap-4 overflow-hidden">
+                                        <div className="w-32 sm:w-40 aspect-video rounded-xl bg-black border border-zinc-800 flex items-center justify-center shrink-0 group-hover:border-yellow-500/50 transition-colors shadow-inner overflow-hidden">
+                                            {item.thumbnail ? (
+                                                <img src={item.thumbnail} alt="thumb" className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
+                                            ) : (
+                                                <Youtube size={20} className="text-red-500 opacity-80" />
+                                            )}
+                                        </div>
+                                        <div className="flex flex-col min-w-0">
+                                            <h4 className="text-sm font-bold text-zinc-200 truncate group-hover:text-yellow-400 transition-colors">{item.title}</h4>
+                                            <span className="text-[10px] font-medium text-zinc-500 mt-1 truncate">{item.uploader}</span>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-4 shrink-0 pl-4">
+                                        <span className="hidden sm:inline-block bg-zinc-800/80 px-2 py-1 rounded text-[9px] font-bold text-zinc-300 border border-zinc-700/50">{item.resolution}</span>
+                                        <span className="text-xs font-mono text-zinc-500">{item.duration_str}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                   </div>
+               )}
+           </div>
+        </div>
+    );
+};
+"""
+
+with open("static/pages/beranda.jsx", "w", encoding="utf-8") as f:
+    f.write(beranda_code.strip())
+
+if "compile_kepkat_ui" in globals():
+    compile_kepkat_ui()
+print("✅ CELL 1 (Halaman Beranda) berhasil disimpan!")
